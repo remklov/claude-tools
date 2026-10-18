@@ -1,0 +1,13 @@
+{
+  "id": "docker",
+  "version": "0.1.0",
+  "title": "Docker and Compose",
+  "detect": [{ "glob": "**/Dockerfile*" }, { "glob": "**/*compose*.y*ml" }],
+  "areas": ["infra"],
+  "options": {
+    "runningStackCommands": { "type": "array", "default": [], "description": "Commands that would touch the owner's running stack (guards)" }
+  },
+  "rules": "rules.md",
+  "playbooks": { "implementer": ["playbooks/implementer/container-change.md"] },
+  "scripts": { "image-pins": "scripts/image-pins.mjs" }
+}

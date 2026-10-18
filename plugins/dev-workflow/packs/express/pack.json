@@ -1,0 +1,19 @@
+{
+  "id": "express",
+  "version": "0.1.0",
+  "title": "Express HTTP APIs",
+  "detect": [{ "dependency": "express" }],
+  "areas": ["backend"],
+  "variants": {
+    "4": { "description": "Express 4: async errors are not forwarded", "rules": "rules.v4.md", "detect": [{ "dependency": "express", "major": "4" }] },
+    "5": { "description": "Express 5: rejected promises reach the error handler", "rules": "rules.v5.md", "detect": [{ "dependency": "express", "major": "5" }] }
+  },
+  "defaultVariant": "5",
+  "options": {
+    "appEntry": { "type": "string", "required": true, "description": "Where tests get the app: file#export, e.g. src/app.ts#createApp() or src/index.ts#default" },
+    "errorShape": { "type": "string", "default": "{ \"error\": \"<message>\" }", "description": "JSON shape of error responses" },
+    "errorMiddleware": { "type": "string", "default": "the error middleware", "description": "Path or name of the error middleware" }
+  },
+  "rules": "rules.md",
+  "playbooks": { "implementer": ["playbooks/implementer/express-route.md"] }
+}
