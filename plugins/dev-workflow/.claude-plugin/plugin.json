@@ -1,0 +1,10 @@
+{
+  "name": "dev-workflow",
+  "displayName": "Dev Workflow",
+  "version": "0.1.0",
+  "description": "Orchestrated development workflow: generalist agents with role playbooks, stack packs and deterministic scripts (cw).",
+  "author": { "name": "Benedikt Volkmer" },
+  "repository": "https://github.com/remklov/claude-tools",
+  "license": "MIT",
+  "keywords": ["workflow", "orchestration", "subagents", "playbooks"]
+}

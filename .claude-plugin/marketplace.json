@@ -1,0 +1,19 @@
+{
+  "name": "remklov",
+  "owner": { "name": "Benedikt Volkmer", "url": "https://github.com/remklov" },
+  "description": "Orchestrated dev workflow with generalist agents, role playbooks and stack packs, plus the agents progress mod.",
+  "plugins": [
+    {
+      "name": "dev-workflow",
+      "source": "./plugins/dev-workflow",
+      "description": "Orchestrator, generalist implementer/reviewer/investigator agents, role playbooks, stack packs and the cw CLI.",
+      "category": "workflow"
+    },
+    {
+      "name": "agents-progress",
+      "source": "./plugins/agents-progress",
+      "description": "Mod: agents pane with avatars and a task band for the dev workflow; shows any subagents.",
+      "category": "mod"
+    }
+  ]
+}
