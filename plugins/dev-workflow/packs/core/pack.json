@@ -1,0 +1,16 @@
+{
+  "id": "core",
+  "version": "0.1.0",
+  "title": "Core rules for every stack",
+  "description": "Stack-neutral code quality, testing and security rules; core guards and permissions.",
+  "options": {
+    "abbreviations": { "type": "array", "default": ["id", "url", "api", "req", "res", "next", "err", "props", "ref"], "description": "Abbreviations allowed in names" },
+    "todoFormat": { "type": "string", "default": "TODO(<TICKET-KEY>): …", "description": "How a TODO comment must look" }
+  },
+  "rules": "rules.md",
+  "settings": {
+    "allow": ["Bash(cw *)", "Bash(git add *)", "Bash(git commit *)", "Bash(git branch -m *)"],
+    "ask": ["Bash(git push *)"],
+    "deny": ["Agent(model:*)", "Agent(effort:*)"]
+  }
+}

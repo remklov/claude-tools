@@ -1,0 +1,15 @@
+{
+  "id": "node-npm",
+  "version": "0.1.0",
+  "title": "Node.js with npm (workspaces)",
+  "detect": [{ "glob": "package.json" }, { "glob": "*/package.json" }],
+  "areas": ["backend", "frontend"],
+  "rules": "rules.md",
+  "playbooks": { "investigator": ["playbooks/investigator/dependency-trace.md", "playbooks/investigator/claim-check.md"] },
+  "scripts": { "dependency-changes": "scripts/dependency-changes.mjs" },
+  "checkDiscovery": "scripts/check-discovery.mjs",
+  "guards": {
+    "dependencyCommands": ["npm install", "npm i", "npm ci", "npm uninstall", "npm update", "npm audit fix", "npx npm-check-updates", "npm add", "npm remove"]
+  },
+  "settings": { "ask": ["Bash(npm ci *)", "Bash(npm install *)", "Bash(npm i *)", "Bash(npm uninstall *)"] }
+}

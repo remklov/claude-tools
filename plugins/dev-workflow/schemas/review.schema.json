@@ -1,0 +1,39 @@
+{
+  "$comment": "Reviewer result saved by cw review save (spec 01 §9).",
+  "type": "object",
+  "required": ["kind", "version", "task", "round", "status", "checks", "acceptanceCriteria", "rulesChecked", "findings"],
+  "properties": {
+    "kind": { "const": "review" },
+    "version": { "const": 1 },
+    "task": { "type": "string" },
+    "round": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["approved", "changes_requested"] },
+    "checks": {
+      "type": "array",
+      "items": { "type": "object", "required": ["package", "check", "result"], "properties": { "result": { "enum": ["pass", "fail", "timeout"] } } }
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "met", "evidence"], "properties": { "id": { "type": "string" }, "met": { "type": "boolean" }, "evidence": { "type": "string" } } }
+    },
+    "mutations": { "type": "array" },
+    "rulesChecked": { "type": "array", "items": { "type": "string" } },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "rule", "issue"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "enum": ["blocking", "non_blocking"] },
+          "rule": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "issue": { "type": "string" },
+          "suggestion": { "type": "string" },
+          "sendAlong": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

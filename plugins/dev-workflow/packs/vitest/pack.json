@@ -1,0 +1,18 @@
+{
+  "id": "vitest",
+  "version": "0.1.0",
+  "title": "Vitest",
+  "detect": [
+    {
+      "dependency": "vitest"
+    }
+  ],
+  "rules": "rules.md",
+  "scripts": {
+    "no-focus": "scripts/no-focus.mjs"
+  },
+  "testRunner": {
+    "single": "npx vitest run {file}",
+    "nameFlag": "-t"
+  }
+}

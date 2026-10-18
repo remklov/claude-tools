@@ -1,0 +1,11 @@
+{
+  "id": "typescript",
+  "version": "0.1.0",
+  "title": "TypeScript (strict)",
+  "detect": [{ "glob": "tsconfig.json" }, { "glob": "*/tsconfig.json" }, { "dependency": "typescript" }],
+  "options": {
+    "moduleResolution": { "type": "string", "default": "bundler", "description": "nodenext requires .js extensions on relative imports" }
+  },
+  "rules": "rules.md",
+  "playbooks": { "implementer": ["playbooks/implementer/narrow-unknown.md"] }
+}

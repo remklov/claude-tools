@@ -1,0 +1,1 @@
+Explain why, not what. No commented-out code. No TODO comments: open work goes into `plan/NEXT_STEPS.MD` as a row (ID from `cw ticket reserve-id <PREFIX>`); a comment may point to its ID (`see NV-9`).

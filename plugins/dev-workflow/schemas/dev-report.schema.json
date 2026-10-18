@@ -1,0 +1,34 @@
+{
+  "$comment": "Implementer report saved by cw report save (spec 01 §8).",
+  "type": "object",
+  "required": ["kind", "version", "task", "round", "status", "branch", "changedFiles", "acceptanceCriteria", "checks", "migrations", "docs", "openPoints"],
+  "properties": {
+    "kind": { "const": "dev-report" },
+    "version": { "const": 1 },
+    "task": { "type": "string" },
+    "round": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["done", "blocked", "misclassified"] },
+    "branch": { "type": "string" },
+    "worktree": { "type": ["string", "null"] },
+    "head": { "type": ["string", "null"] },
+    "changedFiles": { "type": "array", "items": { "type": "string" } },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "met"],
+        "properties": { "id": { "type": "string", "pattern": "^AC\\d+$" }, "met": { "type": "boolean" }, "evidence": { "type": "string" } }
+      }
+    },
+    "proofs": { "type": "array" },
+    "checks": { "type": "object", "required": ["overall"], "properties": { "file": { "type": ["string", "null"] }, "overall": { "enum": ["pass", "fail", "none", "missing"] } } },
+    "migrations": { "type": "string" },
+    "docs": { "type": "array", "items": { "type": "string" } },
+    "openPoints": {
+      "type": "array",
+      "items": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string" }, "tag": { "enum": ["manual", "follow-up", "risk", "question"] } } }
+    },
+    "blocked": { "type": ["object", "null"] },
+    "misclassified": { "type": ["object", "null"] }
+  }
+}

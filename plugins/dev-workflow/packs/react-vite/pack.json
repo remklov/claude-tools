@@ -1,0 +1,17 @@
+{
+  "id": "react-vite",
+  "version": "0.1.0",
+  "title": "React with Vite",
+  "detect": [{ "dependency": "react" }],
+  "areas": ["frontend"],
+  "variants": {
+    "react-18": { "description": "React 18", "detect": [{ "dependency": "react", "major": "18" }] },
+    "react-19": { "description": "React 19", "detect": [{ "dependency": "react", "major": "19" }] }
+  },
+  "defaultVariant": "react-19",
+  "options": {
+    "vitestGlobals": { "type": "boolean", "default": false, "description": "true if Vitest globals are on (Testing Library then cleans up itself)" }
+  },
+  "rules": "rules.md",
+  "playbooks": { "implementer": ["playbooks/implementer/ui-change.md"], "reviewer": ["playbooks/reviewer/ui-review.md"] }
+}

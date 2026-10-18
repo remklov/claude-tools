@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "startup|resume", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-start.mjs"] }] }
+    ],
+    "SubagentStart": [
+      { "matcher": "^dev-workflow:", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/subagent-start.mjs"] }] }
+    ],
+    "SubagentStop": [
+      { "matcher": "^dev-workflow:(implementer-(s|m|l|xl)|reviewer|investigator)$", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/subagent-stop.mjs"] }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash|Agent", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/guard.mjs"] }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/ticket-intent.mjs"] }] }
+    ]
+  }
+}

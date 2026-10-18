@@ -1,0 +1,27 @@
+{
+  "id": "postgres-sql",
+  "version": "0.1.0",
+  "title": "PostgreSQL with versioned migrations",
+  "detect": [{ "glob": "**/migrations/*.sql" }, { "dependency": "pg" }, { "dependency": "drizzle-orm" }],
+  "areas": ["data", "backend"],
+  "variants": {
+    "numbered-sql": { "description": "Hand-written NNN_description.sql files applied in order", "rules": "rules.numbered-sql.md", "detect": [{ "glob": "**/migrations/[0-9][0-9][0-9]_*.sql" }] },
+    "drizzle-kit": { "description": "drizzle-kit generated migrations", "detect": [{ "glob": "**/drizzle.config.*" }] }
+  },
+  "defaultVariant": "numbered-sql",
+  "options": {
+    "dir": { "type": "string", "required": true, "description": "Migrations directory (repo-relative)" },
+    "pattern": { "type": "string", "default": "NNN_description.sql", "description": "File name pattern" },
+    "testDatabase": { "type": "object", "default": {}, "description": "{ env, service } of the isolated test database" },
+    "devDatabasePort": { "type": "number", "default": 0, "description": "Port of the development database agents must never use (0 = none)" }
+  },
+  "rules": "rules.md",
+  "playbooks": {
+    "implementer": ["playbooks/implementer/sql-migration.md"],
+    "reviewer": ["playbooks/reviewer/migration-review.md"],
+    "orchestrator": ["playbooks/orchestrator/migration-handover.md"]
+  },
+  "scripts": { "next-number": "scripts/next-number.mjs", "migration-check": "scripts/migration-check.mjs" },
+  "guards": { "commands": ["drizzle-kit push", "npm run db:push", "npx drizzle-kit push"] },
+  "complexity": [{ "paths": ["{options.dir}/**"], "min": "l", "reason": "schema migration" }]
+}
