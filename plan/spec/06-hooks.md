@@ -99,7 +99,7 @@ Input: `agent_type`, `agent_id`, `last_assistant_message`, `stop_hook_active`, `
 4. Invalid and fewer than 2 previous blocks for this `agent_id` (counter in `task.json.stopAttempts`, or in `hooks-state.json` when no task resolves) → output
 
 ```json
-{ "decision": "block", "reason": "Your final message must be the JSON that `cw report save` prints. Problem: AC3 has no evidence. Run `cw report save --task <id>` again with the missing fields and end with its output." }
+{ "decision": "block", "reason": "Your final message must be the complete JSON that `cw report save` prints — it replaces your previous final message, so repeat it in full. Problem: AC3 has no evidence. Run `cw report save --task <id>` again with the missing fields and end with its full output." }
 ```
 
 5. Invalid after 2 blocks, or `stop_hook_active` already true twice → exit 0 and log; the orchestrator's `cw task review` precondition still refuses an invalid report, so nothing slips through.

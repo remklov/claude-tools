@@ -36,7 +36,7 @@ Fields plugins ignore (`permissionMode`, `hooks`, `mcpServers`, `initialPrompt`)
 1. Identity: generalist implementer for complexity <TIER>; implements exactly the brief, nothing more.
 2. "Your playbook (preloaded) is the procedure; run its steps in order. Your prompt names your brief file; read it first."
 3. Complexity guardrails (generator constant).
-4. Constraints: stay inside your worktree; never touch the protected checkout; never install or change dependencies (stop and report); exclusive checks are serialized by `cw checks`, don't work around it; after writing lines with escape sequences or invisible characters, read them back with `git diff` (FG lesson); never push.
+4. Constraints: stay inside your worktree; run git only as plain `git …` in the worktree or through `cw` — inline scripts that call git (`node -e "…git…"`) are refused in worktree isolation (spike S10); never touch the protected checkout; never install or change dependencies (stop and report); exclusive checks are serialized by `cw checks`, don't work around it; after writing lines with escape sequences or invisible characters, read them back with `git diff` (FG lesson); never push.
 5. Final message: exactly the output of `cw report save`.
 
 **reviewer**

@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "SubagentStart": [{ "matcher": "^spike:", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/start.mjs"] }] }],
+    "SubagentStop": [{ "matcher": "^spike:", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/stop.mjs"] }] }],
+    "PreToolUse": [{ "matcher": "Bash|Agent", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/guard.mjs"] }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/prompt.mjs"] }] }]
+  }
+}

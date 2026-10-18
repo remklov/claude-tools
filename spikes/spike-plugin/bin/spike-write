@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const c = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir']).toString().trim();
+fs.mkdirSync(c + '/dev-workflow', { recursive: true });
+fs.writeFileSync(c + '/dev-workflow/wt.txt', 'ok');
+console.log('SPIKE-WRITE-OK ' + c);

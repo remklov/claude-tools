@@ -214,7 +214,7 @@ A return round resets `steps` to `{ done: 0, total: 9 }`.
 
 ### 4.7 Claims and intake (`lib/claims.mjs`)
 
-Format and git mechanics: spec 01 §5.4. Session identity: `CLAUDE_SESSION_ID` if the environment provides it, else `<host>:<checkout>:<ppid>`; `cw` stores it in `<common-dir>/dev-workflow/session-<ppid>.json` so later calls of the same session recognise their claims.
+Format and git mechanics: spec 01 §5.4. Session identity: `CLAUDE_CODE_SESSION_ID` (set by Claude Code for Bash commands, spike S10) if present, else `<host>:<checkout>:<ppid>`; `cw` stores it in `<common-dir>/dev-workflow/session-<ppid>.json` so later calls of the same session recognise their claims.
 
 | Command | Behaviour |
 |---|---|
