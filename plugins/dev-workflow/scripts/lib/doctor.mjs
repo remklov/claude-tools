@@ -1,6 +1,6 @@
 // Environment checks (spec 02 §3 cw doctor), cached for 12 h.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { gitVersion, tryGit } from './git.mjs';
@@ -103,6 +103,15 @@ export function doctorCached(ctx, { fresh = false } = {}) {
   const results = runDoctor(ctx);
   writeJson(cacheFile, { key, at: Date.now(), results, reported: cache?.reported ?? [] });
   return { results, cached: false, reported: cache?.reported ?? [] };
+}
+
+// Settings changes made by cw (merge driver, rules build, init) make the cached result stale.
+export function invalidateDoctorCache(ctx) {
+  try {
+    unlinkSync(join(ctx.stateDir, 'doctor-cache.json'));
+  } catch {
+    // No cache yet.
+  }
 }
 
 export function markReported(ctx, ids) {

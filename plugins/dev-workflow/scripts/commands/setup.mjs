@@ -1,7 +1,7 @@
 // Setup and inspection: init, doctor, profile, playbook, rules.
 import { readFileSync } from 'node:fs';
 import { requireContext } from '../lib/ctx.mjs';
-import { doctorCached } from '../lib/doctor.mjs';
+import { doctorCached, invalidateDoctorCache } from '../lib/doctor.mjs';
 import { detect, registerMergeDriver, settingsFragment, updateGitignore, writeProfile, writeSettings, writeSnippet } from '../lib/init.mjs';
 import { color, CwError, EXIT, print, printJson, table } from '../lib/out.mjs';
 import { resolvePacks } from '../lib/packs.mjs';
@@ -19,6 +19,7 @@ export async function init(flags) {
   if (flags['merge-driver']) {
     const profile = loadProfile({ ...ctx, profilePath: ctx.profilePath });
     print(registerMergeDriver(ctx, profile) ? 'merge driver registered' : 'no markdown-table backlog; nothing to register');
+    invalidateDoctorCache(ctx);
     return;
   }
   if (flags.detect || !flags.write) {
@@ -48,6 +49,7 @@ export async function init(flags) {
   print(`updated ${writeSnippet(fresh)}`);
   const lock = writeRulebook(fresh, rulebook({ ctx: fresh, profile, packs }), readFileSync(fresh.profilePath, 'utf8'));
   print(`compiled ${lock.rules.length} rules into .claude/rules/workflow/`);
+  invalidateDoctorCache(fresh);
   print('\nStart an orchestrator session with: claude --agent dev-workflow:orchestrator');
   print('Then say "starte mit Ticket <ID>" or "nimm das nächste Ticket".');
 }
@@ -122,6 +124,7 @@ export async function rules(flags, [sub, arg]) {
         return diff.isCurrent ? EXIT.ok : EXIT.failed;
       }
       const lock = writeRulebook(ctx, book, profileText(ctx));
+      invalidateDoctorCache(ctx);
       for (const item of book.disabled) print(color.yellow(`disabled ${item.id}: ${item.reason}`));
       if (book.inactive.length) print(color.dim(`inactive (no package with that area): ${book.inactive.join(', ')}`));
       print(`compiled ${lock.rules.length} rules into ${book.outputs.length} files in .claude/rules/workflow/`);
