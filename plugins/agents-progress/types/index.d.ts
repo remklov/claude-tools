@@ -1,25 +1,3 @@
-export type Phase = 'spec' | 'classify' | 'confirm' | 'implement' | 'review' | 'deliver' | 'done' | 'escalated' | 'aborted'
-
-/** One task of the dev workflow's state.json, as written by cw. */
-export type TaskState = {
-  id: string
-  ticket: string
-  title: string
-  phase: Phase
-  round: number
-  maxRounds: number
-  complexity: string | null
-  areas: string[]
-  prUrl: string | null
-  agents: Record<string, string | null>
-  descriptions: Record<string, string | null>
-  steps: { done: number; total: number; note: string }
-  parent: string | null
-}
-
-/** A ticket claimed by another session or machine. */
-export type ForeignClaim = { ticket: string; phase: string; host: string; since: string; isStale: boolean }
-
 export type AgentStatus = 'running' | 'done' | 'failed'
 
 export type AgentRun = {
@@ -40,13 +18,42 @@ export type AgentRun = {
   tokens: number
 }
 
+/** One task of dev-workflow's state file, as the mod keeps it (docs/PLAN.md §8). */
+export type TaskState = {
+  id: string
+  ticket: string
+  title: string
+  branch: string
+  phase: string
+  /** null while the task is active; its outcome once it ended. */
+  outcome: string | null
+  /** The implementer round. */
+  round: number
+  reviewRound: number
+  maxReviewRounds: number
+  complexity: string | null
+  areas: string[]
+  /** The agent ids cw recorded for the task. */
+  agents: { implementer: string | null; reviewer: string | null }
+  /** The implementer's step marks (`cw step`), when there are any. */
+  steps: { done: number; total: number } | null
+  prUrl: string | null
+}
+
+/** The state file the mod follows: its path (null outside a dev-workflow project) and the mtime it last read. */
+export type StateSource = {
+  path: string | null
+  mtimeMs: number
+  /** How often the file was read, for the tests and the debug log. */
+  reads: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'agents-progress': {
       agents: AgentRun[]
       tasks: TaskState[]
-      claims: ForeignClaim[]
-      source: { commonDir: string; mtimeMs: number; claimsAt: number }
+      source: StateSource
       hasAutoOpened: boolean
       now: number
     }

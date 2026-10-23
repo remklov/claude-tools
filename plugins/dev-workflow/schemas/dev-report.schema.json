@@ -1,34 +1,59 @@
 {
-  "$comment": "Implementer report saved by cw report save (spec 01 §8).",
+  "title": "Implementer report piped to cw report save (docs/PLAN.md §6 step 8); cw adds the git, checks and proof facts and saves report-<round>.json",
   "type": "object",
-  "required": ["kind", "version", "task", "round", "status", "branch", "changedFiles", "acceptanceCriteria", "checks", "migrations", "docs", "openPoints"],
+  "additionalProperties": false,
+  "required": ["status", "acceptanceCriteria"],
   "properties": {
-    "kind": { "const": "dev-report" },
-    "version": { "const": 1 },
-    "task": { "type": "string" },
-    "round": { "type": "integer", "minimum": 1 },
     "status": { "enum": ["done", "blocked", "misclassified"] },
-    "branch": { "type": "string" },
-    "worktree": { "type": ["string", "null"] },
-    "head": { "type": ["string", "null"] },
-    "changedFiles": { "type": "array", "items": { "type": "string" } },
     "acceptanceCriteria": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "met"],
-        "properties": { "id": { "type": "string", "pattern": "^AC\\d+$" }, "met": { "type": "boolean" }, "evidence": { "type": "string" } }
+        "additionalProperties": false,
+        "required": ["id", "met", "evidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^AC[1-9][0-9]*$" },
+          "met": { "type": "boolean" },
+          "evidence": { "type": "string" }
+        }
       }
     },
-    "proofs": { "type": "array" },
-    "checks": { "type": "object", "required": ["overall"], "properties": { "file": { "type": ["string", "null"] }, "overall": { "enum": ["pass", "fail", "none", "missing"] } } },
-    "migrations": { "type": "string" },
-    "docs": { "type": "array", "items": { "type": "string" } },
+    "risks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "openPoints": {
       "type": "array",
-      "items": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string" }, "tag": { "enum": ["manual", "follow-up", "risk", "question"] } } }
+      "items": {
+        "description": "a text, or { text, tag? } with tag manual|follow-up|risk|question",
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text"],
+            "properties": {
+              "text": { "type": "string", "minLength": 1 },
+              "tag": { "enum": ["manual", "follow-up", "risk", "question"] }
+            }
+          }
+        ]
+      }
     },
-    "blocked": { "type": ["object", "null"] },
-    "misclassified": { "type": ["object", "null"] }
+    "blocked": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["question", "needed"],
+      "properties": {
+        "question": { "type": "string", "minLength": 1 },
+        "needed": { "type": "string", "minLength": 1 }
+      }
+    },
+    "misclassified": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["reason", "suggested"],
+      "properties": {
+        "reason": { "type": "string", "minLength": 1 },
+        "suggested": { "enum": ["s", "m", "l", "xl"] }
+      }
+    }
   }
 }

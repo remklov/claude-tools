@@ -1,31 +1,52 @@
+# CI for the remklov marketplace: unit tests on Node 20 and 22, the agent generator check, repo-lint with
+# the private-terms list (secret FORBIDDEN_TERMS) over files and commits, the setup.sh tests, shellcheck,
+# the strict plugin validation and the mod tests, on pull requests and on main.
 name: ci
 on:
   push:
     branches: [main]
   pull_request:
+
 jobs:
   test:
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        # Node 20 is the minimum (docs/PLAN.md D10).
+        node: ["20.19.5", "22.23.0"]
     steps:
       - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4.4.0
         with:
-          node-version: "22.23.0"
-      - name: Git identity for test repositories
+          node-version: ${{ matrix.node }}
+      - name: Git identity for the test repositories
         run: git config --global user.email ci@example.com && git config --global user.name CI && git config --global init.defaultBranch main
-      - name: Unit tests (cw, hooks, packs)
-        run: node --test plugins/dev-workflow/tests/unit/*.test.mjs
-      - name: Agents match the matrix
-        run: node plugins/dev-workflow/tools/generate-agents.mjs --check
-      - name: Repo lint (budgets, no Fable, schemas, secret patterns)
-        run: node plugins/dev-workflow/tools/repo-lint.mjs
-      - name: Forbidden terms
+      # The shell expands the glob: Node ≥ 21 reads --test arguments as patterns and no longer takes a folder.
+      - run: node --test plugins/dev-workflow/tests/*/*.test.mjs
+      - run: node --test tests/dry-run/make-project.test.mjs
+      - run: node plugins/dev-workflow/tools/generate-agents.mjs --check
+      - name: repo-lint (budgets, manifests, agents, private terms in files and commits)
         env:
           FORBIDDEN_TERMS: ${{ secrets.FORBIDDEN_TERMS }}
           CI: "true"
-        run: node plugins/dev-workflow/tools/repo-lint.mjs --terms --range "origin/${{ github.base_ref || 'main' }}..HEAD"
+        run: node plugins/dev-workflow/tools/repo-lint.mjs --range "${{ github.event.pull_request.base.sha || github.event.before }}..HEAD"
+
+  setup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: "22.23.0"
+      - name: Git identity for the test repositories
+        run: git config --global user.email ci@example.com && git config --global user.name CI && git config --global init.defaultBranch main
+      # setup.sh with stub claude, ssh, gh and glab (docs/PLAN.md §12).
+      - run: bash tests/setup.test.sh
+      # Every tracked shell script: setup.sh, its test, templates/setup-dev-workflow.sh and tools/.
+      - run: git ls-files -z '*.sh' | xargs -0 shellcheck
+
   validate:
     runs-on: ubuntu-24.04
     steps:
@@ -33,12 +54,11 @@ jobs:
       - uses: actions/setup-node@v4.4.0
         with:
           node-version: "22.23.0"
+      # The newest Claude Code on purpose: the marketplace must validate with what developers run.
       - name: Install Claude Code
         run: curl -fsSL https://claude.ai/install.sh | bash && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: Validate marketplace and plugins
-        run: |
-          claude plugin validate --strict .
-          claude plugin validate --strict plugins/dev-workflow
-          claude plugin validate --strict plugins/agents-progress
-      - name: Mod tests
-        run: claude plugin test plugins/agents-progress
+      - run: claude --version
+      - run: claude plugin validate --strict .
+      - run: claude plugin validate --strict plugins/dev-workflow
+      - run: claude plugin validate --strict plugins/agents-progress
+      - run: claude plugin test plugins/agents-progress

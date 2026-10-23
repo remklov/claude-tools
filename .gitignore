@@ -1,5 +1,6 @@
 node_modules/
-coverage/
 .DS_Store
 plugins/*/.claude-plugin/types/
-spikes/.out/
+coverage/
+.spikes/
+.impeccable/

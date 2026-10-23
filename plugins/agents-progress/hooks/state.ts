@@ -1,93 +1,99 @@
-// Reads the dev workflow's task index (<git-common-dir>/dev-workflow/state.json, written by cw)
-// and the claims other sessions hold. Pure functions; the mod calls them with file contents.
+// What the mod reads from dev-workflow (docs/PLAN.md §8, §11): the roles of the workflow agents, the
+// tasks of the state file cw writes (`<git common dir>/dev-workflow/state.json`) and the band line of a
+// task. No engine calls here.
+import type { TaskState } from '../types'
 
-import type { ForeignClaim, Phase, TaskState } from '../types'
+export type Tier = 's' | 'm' | 'l' | 'xl'
+export type Role = { kind: 'implementer'; tier: Tier } | { kind: 'reviewer' }
 
-export type { ForeignClaim, TaskState }
+const TIERS: readonly Tier[] = ['s', 'm', 'l', 'xl']
+// The agents of the dev-workflow plugin: `dev-workflow:implementer-<tier>` and `dev-workflow:reviewer`.
+const WORKFLOW_AGENT = /^dev-workflow:(?:implementer-([a-z]+)|(reviewer))$/
 
-const PHASES: readonly Phase[] = ['spec', 'classify', 'confirm', 'implement', 'review', 'deliver', 'done', 'escalated', 'aborted']
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-const text = (value: unknown, fallback = ''): string => (typeof value === 'string' ? value : fallback)
-const num = (value: unknown, fallback = 0): number => (typeof value === 'number' && Number.isFinite(value) ? value : fallback)
-const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [])
-const stringMap = (value: unknown): Record<string, string | null> => {
-  if (!isRecord(value)) return {}
-  const out: Record<string, string | null> = {}
-  for (const [key, item] of Object.entries(value)) out[key] = typeof item === 'string' ? item : null
-  return out
+export function roleOf(agentType: string): Role | null {
+  const match = WORKFLOW_AGENT.exec(agentType)
+  if (!match) return null
+  if (match[2]) return { kind: 'reviewer' }
+  const tier = TIERS.find(candidate => candidate === match[1])
+  return tier ? { kind: 'implementer', tier } : null
 }
 
-// Returns null when the content is not a valid state file, so the caller keeps its last good state.
-export function parseState(content: string): TaskState[] | null {
-  let raw: unknown
+/** Where cw looks for the project config, relative to a directory. */
+export const CONFIG = '.claude/dev-workflow/config.json'
+
+/** The directory and every directory above it, nearest first: where the project config may be. */
+export function ancestorsOf(dir: string): string[] {
+  const out: string[] = []
+  let current = dir.replace(/\/+$/, '') || '/'
+  for (;;) {
+    out.push(current)
+    if (current === '/') return out
+    current = current.slice(0, current.lastIndexOf('/')) || '/'
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value : null)
+const count = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : fallback
+
+function taskOf(raw: unknown): TaskState | null {
+  if (!isRecord(raw)) return null
+  const id = text(raw.id)
+  const ticket = text(raw.ticket)
+  const title = text(raw.title)
+  const phase = text(raw.phase)
+  if (!id || !ticket || !title || !phase) return null
+  const agents = isRecord(raw.agents) ? raw.agents : {}
+  const steps = isRecord(raw.steps) && count(raw.steps.total, 0) > 0 ? { done: count(raw.steps.done, 0), total: count(raw.steps.total, 0) } : null
+  return {
+    id,
+    ticket,
+    title,
+    branch: text(raw.branch) ?? id,
+    phase,
+    outcome: text(raw.outcome),
+    round: count(raw.round, 0),
+    reviewRound: count(raw.reviewRound, 0),
+    maxReviewRounds: count(raw.maxReviewRounds, 3),
+    complexity: text(raw.complexity),
+    areas: Array.isArray(raw.areas) ? raw.areas.filter((area): area is string => typeof area === 'string') : [],
+    agents: { implementer: text(agents.implementer), reviewer: text(agents.reviewer) },
+    steps,
+    prUrl: text(raw.prUrl),
+  }
+}
+
+/** The tasks of a state file's text; null when it is no valid state (the caller keeps the last good one). */
+export function parseState(source: string): TaskState[] | null {
+  let data: unknown
   try {
-    raw = JSON.parse(content)
+    data = JSON.parse(source)
   } catch {
     return null
   }
-  if (!isRecord(raw) || raw.version !== 1 || !Array.isArray(raw.tasks)) return null
-  const tasks: TaskState[] = []
-  for (const item of raw.tasks) {
-    if (!isRecord(item) || typeof item.id !== 'string') continue
-    const phase = PHASES.find(candidate => candidate === item.phase)
-    if (!phase) continue
-    const steps = isRecord(item.steps) ? item.steps : {}
-    tasks.push({
-      id: item.id,
-      ticket: text(item.ticket, item.id),
-      title: text(item.title),
-      phase,
-      round: num(item.round),
-      maxRounds: num(item.maxRounds, 3),
-      complexity: typeof item.complexity === 'string' ? item.complexity : null,
-      areas: strings(item.areas),
-      prUrl: typeof item.prUrl === 'string' && item.prUrl.startsWith('https://') ? item.prUrl : null,
-      agents: stringMap(item.agents),
-      descriptions: stringMap(item.descriptions),
-      steps: { done: num(steps.done), total: num(steps.total, 9), note: text(steps.note) },
-      parent: typeof item.parent === 'string' ? item.parent : null,
-    })
-  }
-  return tasks
+  if (!isRecord(data) || !Array.isArray(data.tasks)) return null
+  return data.tasks.map(taskOf).filter((task): task is TaskState => task !== null)
 }
 
-export const isActive = (task: TaskState): boolean => task.phase !== 'done' && task.phase !== 'aborted'
-export const isPlanned = (task: TaskState): boolean => task.phase === 'spec' || task.phase === 'classify' || task.phase === 'confirm'
+/** A task that has not ended; cw keeps ended ones in the state file for ten minutes. */
+export const isActive = (task: TaskState): boolean => task.outcome === null
 
-// The task a subagent run belongs to: by recorded agent id, else by the exact description cw printed.
-export function taskOfRun(tasks: readonly TaskState[], run: { agentId?: string; description: string }): { task: TaskState; role: string } | null {
-  for (const task of tasks) {
-    for (const [role, id] of Object.entries(task.agents)) if (id && run.agentId && id === run.agentId) return { task, role }
-  }
-  for (const task of tasks) {
-    for (const [role, description] of Object.entries(task.descriptions)) if (description && description === run.description) return { task, role }
-  }
-  return null
-}
+/** The task an agent works for, by the agent id cw recorded. */
+export const taskOfAgent = (tasks: readonly TaskState[], agentId: string | undefined): TaskState | undefined =>
+  agentId ? tasks.find(task => task.agents.implementer === agentId || task.agents.reviewer === agentId) : undefined
 
-// Parses `for-each-ref` lines ("<sha> <ref>") plus `cat-file` payloads into claims of other sessions.
-export function foreignClaims(payloads: readonly string[], ownTickets: ReadonlySet<string>, now: number, staleHours = 24): ForeignClaim[] {
-  const claims: ForeignClaim[] = []
-  for (const payload of payloads) {
-    let raw: unknown
-    try {
-      raw = JSON.parse(payload)
-    } catch {
-      continue
-    }
-    if (!isRecord(raw) || typeof raw.ticket !== 'string' || ownTickets.has(raw.ticket)) continue
-    const holder = isRecord(raw.holder) ? raw.holder : {}
-    const since = text(raw.since)
-    const updated = Date.parse(text(raw.updatedAt, since)) || now
-    claims.push({ ticket: raw.ticket, phase: text(raw.phase, '?'), host: text(holder.host, '?'), since, isStale: now - updated > staleHours * 3_600_000 })
-  }
-  return claims.sort((a, b) => a.ticket.localeCompare(b.ticket))
-}
+// The Desktop app draws only https links as links.
+const isHttps = (url: string | null): url is string => url !== null && URL.canParse(url) && new URL(url).protocol === 'https:'
 
-export function age(since: string, now: number): string {
-  const minutes = Math.max(0, Math.round((now - (Date.parse(since) || now)) / 60_000))
-  if (minutes < 60) return `${minutes}m`
-  if (minutes < 48 * 60) return `${Math.round(minutes / 60)}h`
-  return `${Math.round(minutes / 1440)}d`
+export type BandLine = { key: string; text: string; isFailure: boolean; prUrl: string | null }
+
+/** One band line: ticket · title · phase · `Round n/m` in review · tier · `step n/m` in implement, and the PR/MR link. */
+export function bandLine(task: TaskState): BandLine {
+  const parts = [task.ticket, task.title, task.phase]
+  if (task.phase === 'review' && task.reviewRound > 0) parts.push(`Round ${task.reviewRound}/${task.maxReviewRounds}`)
+  if (task.complexity) parts.push(task.complexity.toUpperCase())
+  // The implementer's step marks; before the implementer starts they read 0.
+  if (task.steps && task.phase === 'implement') parts.push(`step ${task.steps.done}/${task.steps.total}`)
+  return { key: task.id, text: parts.join(' · '), isFailure: task.phase === 'escalated', prUrl: isHttps(task.prUrl) ? task.prUrl : null }
 }

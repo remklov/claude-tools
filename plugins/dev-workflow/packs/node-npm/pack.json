@@ -2,14 +2,33 @@
   "id": "node-npm",
   "version": "0.1.0",
   "title": "Node.js with npm (workspaces)",
+  "description": "npm workspace rules, check discovery for cw init and the dependency-change scan for the reviewer.",
   "detect": [{ "glob": "package.json" }, { "glob": "*/package.json" }],
   "areas": ["backend", "frontend"],
   "rules": "rules.md",
-  "playbooks": { "investigator": ["playbooks/investigator/dependency-trace.md", "playbooks/investigator/claim-check.md"] },
-  "scripts": { "dependency-changes": "scripts/dependency-changes.mjs" },
-  "checkDiscovery": "scripts/check-discovery.mjs",
-  "guards": {
-    "dependencyCommands": ["npm install", "npm i", "npm ci", "npm uninstall", "npm update", "npm audit fix", "npx npm-check-updates", "npm add", "npm remove"]
+  "scripts": {
+    "check-discovery": "scripts/check-discovery.mjs",
+    "dependency-changes": "scripts/dependency-changes.mjs"
   },
-  "settings": { "ask": ["Bash(npm ci *)", "Bash(npm install *)", "Bash(npm i *)", "Bash(npm uninstall *)"] }
+  "checkDiscovery": "check-discovery",
+  "scopeScripts": ["dependency-changes"],
+  "guards": {
+    "dependencyCommands": [
+      "npm install", "npm i", "npm add", "npm in", "npm ins", "npm inst", "npm insta", "npm instal", "npm isnt", "npm isnta", "npm isntal", "npm isntall",
+      "npm ci", "npm clean-install", "npm ic", "npm install-clean", "npm isntall-clean",
+      "npm uninstall", "npm unlink", "npm remove", "npm rm", "npm r", "npm un",
+      "npm update", "npm up", "npm upgrade", "npm udpate",
+      "npm install-test", "npm it", "npm install-ci-test", "npm cit", "npm clean-install-test", "npm sit",
+      "npm audit fix"
+    ]
+  },
+  "settings": {
+    "ask": [
+      "Bash(npm ci *)", "Bash(npm install *)", "Bash(npm i *)", "Bash(npm uninstall *)",
+      "Bash(npm add *)", "Bash(npm in *)", "Bash(npm ins *)", "Bash(npm inst *)", "Bash(npm insta *)", "Bash(npm instal *)", "Bash(npm isnt *)", "Bash(npm isnta *)", "Bash(npm isntal *)", "Bash(npm isntall *)",
+      "Bash(npm clean-install *)", "Bash(npm ic *)", "Bash(npm install-clean *)", "Bash(npm isntall-clean *)",
+      "Bash(npm unlink *)", "Bash(npm remove *)", "Bash(npm rm *)", "Bash(npm r *)", "Bash(npm un *)",
+      "Bash(npm install-test *)", "Bash(npm it *)", "Bash(npm install-ci-test *)", "Bash(npm cit *)", "Bash(npm clean-install-test *)", "Bash(npm sit *)"
+    ]
+  }
 }

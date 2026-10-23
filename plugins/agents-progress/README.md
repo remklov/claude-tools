@@ -1,28 +1,59 @@
 # agents-progress
 
-A Claude Code mod for the dev workflow (`dev-workflow` plugin): it shows what the workflow's agents do, in the terminal and in the Desktop app. It also shows any other subagents.
+A Claude Code mod for the `dev-workflow` plugin of this marketplace: an Agents pane beside the chat and a band above the prompt with each active task.
 
-- **Agents pane**: every subagent with its avatar, description, role and tier (`implementer · M`), model, effort, status, step progress (`step 5/9 checks`), context fill, tokens and elapsed time. Tasks that are still being specified appear under "Planned". It opens by itself once per session at the first `dev-workflow:` agent; `/agents-progress` shows or hides it.
-- **Avatars**: pixel crabs. Implementers wear the costume of their task's area (frontend painter, backend/data chef, infra engineer; several areas: plain crab), the reviewer is a detective, the investigator a scientist, `Explore` a pirate. The tier (`s` to `xl`) sets the accent colour and the badge. Running crabs walk unless the system asks for reduced motion; the terminal shows the badge only.
-- **Task band** above the prompt: one line per active task with ticket, title, phase, `Round n/3` while reviewing, step progress while implementing, tier and the PR link; escalated tasks in red. A dim line lists tickets other sessions or machines hold (from the claim registry).
+- **Agents pane**: every subagent of the session with description, agent type, model, effort, the round of its task, status (running, done, failed), context fill, tokens and elapsed time. It opens by itself once per session, when the first dev-workflow agent starts. `/agents-progress` shows or hides it.
+- **Avatars**: each agent is a pixel crab.
+  - An implementer dresses for the area of its task: frontend a painter, backend a chef, infra an engineer. A task with several areas or none gives a plain crab.
+  - The implementer's tier (`S` to `XL`) sets its accent colour and badge.
+  - The reviewer is a detective, `Explore` a pirate, any other agent a plain crab.
+  - Running crabs walk unless the system asks for reduced motion. The terminal shows the badge in the accent colour instead of a crab.
+- **Status bar**: the bar under each agent shows its status, not its progress. While the agent runs, a stripe slides along it (it stands still under reduced motion, and in the terminal). A finished agent's bar is full, green when done and red when failed.
+- **Task band**: one line per active task, in this order:
+  - ticket, title and phase;
+  - `Round n/3` while in review;
+  - the tier, and `step n/8` while the implementer works;
+  - the PR/MR link (https only).
 
-## Where the data comes from
+  An escalated task shows in red. The band is hidden while no task is active, and what other mods draw there stays below these lines.
 
-- Tasks, phases, rounds, steps and PR links: `<git-common-dir>/dev-workflow/state.json`, which `cw` writes on every task transition. The mod checks the file's modification time every second and re-reads it right after a `cw …` Bash call. The model never has to report progress.
-- Agent runs: the engine's `agent.spawn`, `turn.step`, `turn.complete` and `SendMessage` events. A run belongs to a task when its agent id or its description (the exact one `cw` printed) matches.
-- Claims held elsewhere: `git fetch origin '+refs/claims/*:refs/dw/claims/*'` at most every two minutes while no agent runs.
+The context fill assumes a window of 1M tokens, or 200k for Haiku models: the engine doesn't report a subagent's window.
 
-The context fill assumes a window of 1M tokens, or 200k for Haiku models; the engine doesn't report a subagent's window.
+## Where the tasks come from
 
-Requires Claude Code 2.1.300 or later. Tested with 2.1.302.
+`cw` writes the tasks to `state.json` in `dev-workflow/` under the git common dir.
+
+- **Finding it:** the mod walks up from the session's directory to `.claude/dev-workflow/config.json`. It then asks `git rev-parse --git-common-dir` there, which also answers in a linked worktree.
+- **Reading it:** once a second, only when its modification time changed, and right after each Bash call that starts with `cw `.
+- **When it is broken or gone:** invalid JSON keeps the last good state. Without the file, or outside a dev-workflow project, the band stays hidden and the pane lists the agents alone.
+
+The mod makes no network call and runs no git fetch.
+
+## Requirements and install
+
+Mods need Claude Code 2.1.287 or later in the terminal, and 2.1.286 or later in the Desktop app. The tests run against the engine you have installed: `claude plugin test` (Claude Code 2.1.308 when this was written).
+
+The mod reads what `dev-workflow` writes but does not depend on it, and neither plugin installs the other. Enable it next to `dev-workflow` from the `remklov` marketplace.
 
 ## Develop
 
+Load the folder for one session; Claude Code hot-reloads a mod loaded this way when a file changes:
+
 ```bash
-claude --plugin-dir ./plugins/agents-progress   # hot-reloads on save
-claude plugin validate --strict ./plugins/agents-progress
-claude plugin test ./plugins/agents-progress
+claude --plugin-dir <repo>/plugins/agents-progress
 ```
+
+From this folder:
+
+```bash
+claude plugin validate --strict .
+```
+
+```bash
+claude plugin test .
+```
+
+Claude Code writes its type declarations to `.claude-plugin/types/` when it loads the mod (ignored by git); `tsconfig.json` extends them for the editor.
 
 ## Attribution
 

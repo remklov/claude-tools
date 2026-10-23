@@ -2,6 +2,7 @@
   "id": "express",
   "version": "0.1.0",
   "title": "Express HTTP APIs",
+  "description": "Error handling, input validation, response flow and HTTP tests for Express 5 and 4, and the express-route procedure.",
   "detect": [{ "dependency": "express" }],
   "areas": ["backend"],
   "variants": {
@@ -10,10 +11,13 @@
   },
   "defaultVariant": "5",
   "options": {
-    "appEntry": { "type": "string", "required": true, "description": "Where tests get the app: file#export, e.g. src/app.ts#createApp() or src/index.ts#default" },
+    "appEntry": {
+      "type": "string",
+      "required": true,
+      "description": "The expression tests use to get the app without listening on a port, e.g. createApp()"
+    },
     "errorShape": { "type": "string", "default": "{ \"error\": \"<message>\" }", "description": "JSON shape of error responses" },
-    "errorMiddleware": { "type": "string", "default": "the error middleware", "description": "Path or name of the error middleware" }
+    "errorMiddleware": { "type": "string", "default": "the error middleware", "description": "Name or path of the error middleware (Express 4)" }
   },
-  "rules": "rules.md",
-  "playbooks": { "implementer": ["playbooks/implementer/express-route.md"] }
+  "rules": "rules.md"
 }

@@ -1,7 +1,3 @@
----
-pack: express
----
-
 ## EXPRESS-ERROR-RESPONSES — Error responses
 <!-- rule: severity=blocking; scope=areas:backend -->
 Invalid client input gets a 4xx status. Error responses use the API's shape `{options.errorShape}`. A 5xx response never exposes stack traces or internal details.

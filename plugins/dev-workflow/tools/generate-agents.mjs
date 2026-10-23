@@ -1,80 +1,50 @@
-// Generates the implementer agents from one matrix and checks the hand-written ones against it.
-//   node tools/generate-agents.mjs            write agents/implementer-*.md
-//   node tools/generate-agents.mjs --check    exit 1 if a file differs from the matrix
-//   node tools/generate-agents.mjs --out DIR --eject [--matrix FILE]   project-local copies (cw agents eject)
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+// Generates the implementer agents from one matrix and checks the hand-written reviewer against it:
+// every agent takes its model and effort from the matrix, and all implementers share one base prompt.
+//   node plugins/dev-workflow/tools/generate-agents.mjs             write agents/implementer-{s,m,l,xl}.md
+//   node plugins/dev-workflow/tools/generate-agents.mjs --check     exit 1 if an agent differs from the matrix
+//   node plugins/dev-workflow/tools/generate-agents.mjs --out DIR   use DIR instead of the plugin's agents/
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { GUARDRAILS } from '../cli/lib/guardrails.mjs';
 
-const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const args = process.argv.slice(2);
-const check = args.includes('--check');
-const eject = args.includes('--eject');
-const outIndex = args.indexOf('--out');
-const outDir = outIndex === -1 ? join(pluginRoot, 'agents') : args[outIndex + 1];
-const matrixIndex = args.indexOf('--matrix');
-
-// Fable models are not used (they need usage credits); the hardest work goes to Opus with xhigh effort.
-const DEFAULT_MATRIX = {
+export const MATRIX = {
   'implementer-s': { model: 'claude-sonnet-5-5', effort: 'low', color: 'green' },
   'implementer-m': { model: 'claude-sonnet-5-5', effort: 'medium', color: 'blue' },
   'implementer-l': { model: 'claude-opus-5-5', effort: 'medium', color: 'orange' },
   'implementer-xl': { model: 'claude-opus-5-5', effort: 'high', color: 'red' },
   reviewer: { model: 'claude-opus-5-5', effort: 'high', color: 'yellow' },
-  investigator: { model: 'claude-opus-5-5', effort: 'xhigh', color: 'cyan' },
-  orchestrator: { model: 'claude-opus-5-5', effort: 'high', color: 'purple' },
 };
-const MATRIX = matrixIndex === -1 ? DEFAULT_MATRIX : { ...DEFAULT_MATRIX, ...JSON.parse(readFileSync(args[matrixIndex + 1], 'utf8')) };
-for (const [name, row] of Object.entries(MATRIX)) {
-  if (/fable/i.test(row.model)) {
-    console.error(`${name}: Fable models are not allowed in this setup.`);
-    process.exit(1);
-  }
-}
 
-const GUARDRAILS = {
-  s: [
-    'Keep the diff minimal: 1–2 files, no change to existing behaviour or contracts.',
-    'If the task turns out to need more, stop before expanding the scope and report `misclassified`.',
-  ],
-  m: [
-    'Stay within one module. Additive, backward-compatible changes only.',
-    'If you need to change an existing contract, schema or several modules, stop and report `misclassified`.',
-  ],
-  l: [
-    'Before editing, read every affected module and list the contracts or schemas you change and all their callers.',
-    'Update every caller in the same change, or keep the old contract working.',
-    'Describe migration and deploy steps in the report (`migrations`).',
-  ],
-  xl: [
-    'Investigate before changing code. State the root cause, or the design options with their trade-offs, backed by evidence from the code.',
-    'Choose the smallest change that solves the problem and justify the choice in the report.',
-    'Call out security, concurrency, data-integrity and domain-critical implications (rules marked protected) explicitly.',
-  ],
-};
+// The reviewer is read-only (D4): no Edit; Write only for its review file outside the project, which
+// guard G-REVIEWER-WRITE enforces.
+const REVIEWER_DISALLOWED_TOOLS = 'Edit, Agent';
+
+// Fields Claude Code ignores for plugin agents (documented), and isolation, which cw prints per call (D4).
+const FORBIDDEN_FIELDS = ['permissionMode', 'hooks', 'mcpServers', 'initialPrompt', 'isolation'];
+
 
 const bullets = (lines) => lines.map((line) => `- ${line}`).join('\n');
 
-function implementer(size, prefix) {
+export function renderImplementer(size) {
   const name = `implementer-${size}`;
-  const row = MATRIX[name];
+  const { model, effort, color } = MATRIX[name];
   const label = size.toUpperCase();
   return `---
 name: ${name}
-description: Generalist implementer for complexity ${label} tasks. Only invoked by the dev-workflow orchestrator.
-model: ${row.model}
-effort: ${row.effort}
-isolation: worktree
+description: Generalist implementer for complexity ${label} tasks. Only started by the dev-workflow orchestrator.
+model: ${model}
+effort: ${effort}
 tools: Read, Edit, Write, Grep, Glob, Bash
 disallowedTools: Agent
 skills:
   - dev-workflow:implementer-playbook
-color: ${row.color}
+color: ${color}
 ---
 
-<!-- Generated by tools/generate-agents.mjs${prefix ? ' (ejected)' : ''}. Do not edit by hand. -->
+<!-- Generated by plugins/dev-workflow/tools/generate-agents.mjs. Do not edit by hand. -->
 
-You are a generalist implementer for complexity ${label} tasks in the dev workflow. You implement exactly the brief you are given, nothing more. Your playbook (preloaded) is the procedure: run its steps in order. Your prompt names your brief file; read it completely first. Project context, procedures and guards arrive at startup.
+You are a generalist implementer for complexity ${label} tasks in the dev workflow. You implement exactly the brief you are given, nothing more. Your preloaded playbook is the procedure: run its steps in order. Your prompt names your brief file; read it completely first.
 
 ## Complexity ${label}
 
@@ -82,71 +52,97 @@ ${bullets(GUARDRAILS[size])}
 
 ## Constraints
 
-- Stay inside your worktree; never touch the protected main checkout.
-- Run git only as plain \`git …\` in your worktree or through \`cw\`. Inline scripts that call git (\`node -e "…git…"\`) are refused in worktree isolation.
-- Never install, remove or upgrade dependencies; if the task needs one, stop and report \`blocked\`.
-- Exclusive checks are serialized by \`cw checks\`; never work around a waiting lock.
-- After writing lines with escape sequences or invisible characters, read them back with \`git diff\`; an edit can turn an escape into the literal character.
-- Never push; the orchestrator does that after the user confirms.
-- When you receive review findings, fix every blocking one and the ones marked "also", rerun the checks, commit and report again.
+- Never install, remove or upgrade dependencies. If the task needs one, stop and report \`blocked\`.
+- Never push. The orchestrator pushes after the user confirms.
+- When you receive review findings, fix every blocking finding and every finding marked \`sendAlong\`, rerun the checks, commit and report again.
 
 ## Final message
 
-Exactly the output of \`cw report save --task <id>\` (the JSON in a \`\`\`json fence), nothing else.
+Exactly the JSON that \`cw report save\` printed, in a \`json\` fence.
 `;
 }
 
-function frontmatterOf(text) {
-  const match = /^---\n([\s\S]*?)\n---/.exec(text);
+const normalize = (text) => text.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+
+// The top-level "key: value" lines of a Markdown file's frontmatter; surrounding quotes are dropped.
+export function frontmatterOf(text) {
+  const match = /^---\n([\s\S]*?)\n---/.exec(normalize(text));
   if (!match) return {};
-  return Object.fromEntries(match[1].split('\n').filter((line) => /^[a-zA-Z]+:/.test(line)).map((line) => {
-    const i = line.indexOf(':');
-    return [line.slice(0, i).trim(), line.slice(i + 1).trim()];
-  }));
+  return Object.fromEntries(
+    match[1]
+      .split('\n')
+      .filter((line) => /^[A-Za-z]+:/.test(line))
+      .map((line) => {
+        const value = line.slice(line.indexOf(':') + 1).trim();
+        return [line.slice(0, line.indexOf(':')).trim(), value.replace(/^(["'])(.*)\1$/, '$2')];
+      }),
+  );
 }
 
-let drift = 0;
-for (const size of ['s', 'm', 'l', 'xl']) {
-  const path = join(outDir, `implementer-${size}.md`);
-  const content = implementer(size, eject);
-  if (check) {
-    if (!existsSync(path) || readFileSync(path, 'utf8') !== content) {
-      console.log(`out of date: ${path}`);
-      drift += 1;
-    }
-    continue;
-  }
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path, content);
-  console.log(`wrote ${path}`);
-}
-for (const name of ['reviewer', 'investigator', 'orchestrator']) {
-  const source = join(pluginRoot, 'agents', `${name}.md`);
-  if (!existsSync(source)) {
-    console.log(`missing: ${source}`);
-    drift += 1;
-    continue;
-  }
-  const text = readFileSync(source, 'utf8');
-  const fm = frontmatterOf(text);
-  const row = MATRIX[name];
-  if (fm.model !== row.model || fm.effort !== row.effort) {
-    console.log(`${name}: frontmatter model/effort (${fm.model}/${fm.effort}) differs from the matrix (${row.model}/${row.effort})`);
-    drift += 1;
-  }
-  for (const ignored of ['permissionMode', 'hooks', 'mcpServers', 'initialPrompt']) {
-    if (ignored in fm) {
-      console.log(`${name}: ${ignored} is ignored for plugin agents; remove it`);
-      drift += 1;
+// Writes the implementers into dir (write: true) or compares them; checks the reviewer either way.
+// Returns { outdated, problems }: outdated implementer files, and every problem as a message.
+export function run(dir, { write }) {
+  const outdated = [];
+  const problems = [];
+  for (const size of ['s', 'm', 'l', 'xl']) {
+    const path = join(dir, `implementer-${size}.md`);
+    const content = renderImplementer(size);
+    if (write) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path, content);
+    } else if (!existsSync(path) || normalize(readFileSync(path, 'utf8')) !== content) {
+      outdated.push(path);
+      problems.push(`${path}: out of date`);
     }
   }
-  if (eject && !check) {
-    const ejected = text.replace(/^model: .*$/m, `model: ${row.model}`).replace(/^effort: .*$/m, `effort: ${row.effort}`).replace(/dev-workflow:(implementer-(s|m|l|xl)|reviewer|investigator)/g, '$1');
-    writeFileSync(join(outDir, `${name}.md`), ejected);
-    console.log(`wrote ${join(outDir, `${name}.md`)}`);
+  const reviewer = join(dir, 'reviewer.md');
+  if (!existsSync(reviewer)) {
+    problems.push(`${reviewer}: missing; it is hand-written, not generated`);
+    return { outdated, problems };
   }
+  const fields = frontmatterOf(readFileSync(reviewer, 'utf8'));
+  for (const key of ['model', 'effort', 'color']) {
+    if (fields[key] !== MATRIX.reviewer[key]) {
+      problems.push(`${reviewer}: ${key} is "${fields[key] ?? ''}", the matrix says "${MATRIX.reviewer[key]}"; edit the file or the matrix`);
+    }
+  }
+  if (fields.disallowedTools !== REVIEWER_DISALLOWED_TOOLS) {
+    problems.push(`${reviewer}: disallowedTools must be "${REVIEWER_DISALLOWED_TOOLS}" (the reviewer is read-only)`);
+  }
+  for (const key of FORBIDDEN_FIELDS) {
+    if (key in fields) problems.push(`${reviewer}: remove "${key}" (ignored for plugin agents, or printed by cw per call)`);
+  }
+  return { outdated, problems };
 }
-if (check) {
-  console.log(drift ? `${drift} problem(s). Run: node tools/generate-agents.mjs` : 'All agents match the matrix.');
-  process.exit(drift ? 1 : 0);
+
+// Node resolves symlinks in the main module's URL, so compare real paths.
+const isMain = () => {
+  try {
+    return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+};
+
+// Sets process.exitCode instead of calling process.exit, so stderr drains before Node exits.
+function main() {
+  const args = process.argv.slice(2);
+  const check = args.includes('--check');
+  const outIndex = args.indexOf('--out');
+  if (outIndex !== -1 && !args[outIndex + 1]) {
+    console.error('usage: generate-agents.mjs [--check] [--out DIR]');
+    process.exitCode = 2;
+    return;
+  }
+  const dir = outIndex === -1 ? join(dirname(fileURLToPath(import.meta.url)), '..', 'agents') : args[outIndex + 1];
+  const { outdated, problems } = run(dir, { write: !check });
+  if (problems.length) {
+    console.error(problems.map((problem) => `- ${problem}`).join('\n'));
+    if (outdated.length) console.error('Regenerate: node plugins/dev-workflow/tools/generate-agents.mjs');
+    process.exitCode = 1;
+    return;
+  }
+  console.log(check ? 'All agents match the matrix.' : `Wrote the implementer agents to ${dir}.`);
 }
+
+if (isMain()) main();

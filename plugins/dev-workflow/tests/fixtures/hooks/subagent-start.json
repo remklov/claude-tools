@@ -1,0 +1,9 @@
+{
+  "session_id": "{{session}}",
+  "transcript_path": "{{transcript}}",
+  "cwd": "{{cwd}}",
+  "prompt_id": "c0531d21-9cd1-4545-b3b7-421b55202b8e",
+  "agent_id": "{{agentId}}",
+  "agent_type": "{{agentType}}",
+  "hook_event_name": "SubagentStart"
+}

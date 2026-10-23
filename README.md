@@ -1,55 +1,46 @@
 # claude-tools
 
-Private Claude Code marketplace **`remklov`** with two plugins:
+The private Claude Code marketplace `remklov` (repository `remklov/claude-tools`). It holds two plugins:
 
-| Plugin | What it is |
+- `dev-workflow`: an orchestrated multi-agent development workflow with generalist agents, role playbooks, stack rule packs and the deterministic `cw` CLI. A session starts it with `/dev-workflow:ticket <TICKET-KEY | NO-TICKET>`.
+- `agents-progress`: an optional mod that shows the workflow's agents and tasks.
+
+## Quickstart
+
+In your own terminal (not inside Claude Code), in the root of the project that should use the workflow:
+
+```bash
+git clone --depth 1 git@github.com:remklov/claude-tools.git /tmp/dw
+/tmp/dw/setup.sh
+```
+
+setup.sh checks Node, Claude Code and SSH access to GitHub (the repository is private), installs `dev-workflow` for the project, offers `agents-progress` for you and runs `cw init`; it asks before every change. Commit the files it lists, then open Claude Code in the project, trust the folder and run `/dev-workflow:ticket <TICKET-KEY | NO-TICKET>`. Teammates and updates run `scripts/setup-dev-workflow.sh`. Details: [docs/setup.md](docs/setup.md).
+
+## Documentation
+
+| Page | What |
 |---|---|
-| `dev-workflow` | Orchestrated development workflow: an orchestrator, generalist agents (`implementer-s/m/l/xl`, `reviewer`, `investigator`) with fixed role playbooks, stack packs (rules, procedures, scripts, guards) and the deterministic CLI `cw`. |
-| `agents-progress` | A mod that shows the workflow's agents (avatars, role, tier, steps) and tasks (phase, review round, PR link, tickets other sessions hold) in the terminal and the Desktop app. |
+| [docs/setup.md](docs/setup.md) | setup.sh: steps, flags, what it writes, troubleshooting |
+| [docs/architecture.md](docs/architecture.md) | How the plugins, roles, `cw`, the task state and the hooks fit together |
+| [docs/playbooks.md](docs/playbooks.md) | The orchestrator, implementer and reviewer playbooks |
+| [docs/config.md](docs/config.md) | The project config `.claude/dev-workflow/config.json` |
+| [docs/packs.md](docs/packs.md) | The stack packs and their rules |
+| [docs/extending.md](docs/extending.md) | Project rules, new packs, agents, guards and skills; the checks before a pull request |
+| [docs/adr/](docs/adr/README.md) | The owner decisions taken during the build |
+| [docs/dry-run.md](docs/dry-run.md) | The manual acceptance checklist |
+| [docs/migration/cq-rules.md](docs/migration/cq-rules.md) | A legacy CQ rule set (example project Acme Shop) mapped to the packs |
+| [docs/PLAN.md](docs/PLAN.md) | The build plan and the verified platform facts |
 
-Design and decisions: `PLAN.md` (German) and `plan/spec/` (English).
+## Layout
 
-## Install in a project
+| Path | What |
+|---|---|
+| `.claude-plugin/marketplace.json` | The marketplace: both plugins by relative path |
+| `setup.sh`, `tests/setup.test.sh` | The guided setup and its tests |
+| `plugins/dev-workflow/` | Agents (`agents/`), the `cw` CLI (`cli/`, shim `bin/cw`), packs (`packs/`), the git preset (`presets/`), schemas (`schemas/`), `init` templates (`templates/`), skills (`skills/`), hooks (`hooks/`), tools (`tools/`) and tests (`tests/`) |
+| `plugins/agents-progress/` | The mod: hooks module, types and tests |
+| `tests/dry-run/` | The dry-run kit: `make-project.mjs` builds a mini project for `docs/dry-run.md` |
 
-Once per machine (the repository is private):
+## Develop
 
-```bash
-gh auth login && gh auth setup-git
-```
-
-Without a GitHub SSH key also set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`. Turn on auto-update under `/plugin` → Marketplaces → `remklov`.
-
-In the project:
-
-1. `/plugin marketplace add remklov/claude-tools`, then `/plugin install dev-workflow@remklov` and `/plugin install agents-progress@remklov`.
-2. `/dev-workflow:setup` detects the stack and asks the open questions; it writes a proposed profile to a temporary file.
-3. In your own terminal: `cw init --write --profile <file>` writes `.claude/workflow/profile.json`, merges `.claude/settings.json` (marketplace, plugins, permissions, worktree settings), registers the backlog merge driver, adds the CLAUDE.md/AGENTS.md section and compiles the rules into `.claude/rules/workflow/`. Commit the result.
-
-`cw` is on the PATH of Claude Code's Bash tool while the plugin is enabled. To use it in your own terminal, put `~/.claude/plugins/…/dev-workflow/bin` on your PATH or call `node <plugin>/scripts/cw.mjs`.
-
-## Work with it
-
-```bash
-claude --agent dev-workflow:orchestrator
-```
-
-Then say "starte mit Ticket NV-9" or "nimm das nächste Ticket". The orchestrator claims the ticket first (`refs/claims/<ID>` on `origin`, visible to every session and machine), writes the spec, classifies it, delegates to an implementer in its own worktree, runs the reviewer and, after your confirmation, opens the PR. In any other session `/dev-workflow:ticket <ID>` does the same.
-
-Useful commands: `cw ticket list` (who works on what), `cw playbook show <role>` (what an agent gets), `cw rules show <ID|alias>`, `cw doctor`.
-
-## Update
-
-`/plugin marketplace update remklov` (or auto-update), then `cw rules build` in each project and commit the rulebook diff. The SessionStart hook reports an outdated rulebook.
-
-## Develop the marketplace
-
-```bash
-tools/install-hooks.sh                       # commit-msg + pre-push gates
-node --test plugins/dev-workflow/tests/unit/*.test.mjs
-node plugins/dev-workflow/tools/generate-agents.mjs [--check]
-claude plugin validate --strict . && claude plugin test plugins/agents-progress
-```
-
-Test a working copy in a project without releasing it: in the project's `.claude/settings.local.json` set `extraKnownMarketplaces.remklov.source` to `{ "source": "directory", "path": "<path to this checkout>" }`.
-
-Release: bump `version` in the changed `plugin.json`, update `CHANGELOG.md`, merge, then `claude plugin tag --push` in each changed plugin directory.
+See [CLAUDE.md](CLAUDE.md) for the conventions and [docs/extending.md](docs/extending.md) for the checks to run before a pull request.

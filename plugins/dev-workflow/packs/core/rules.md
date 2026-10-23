@@ -1,7 +1,3 @@
----
-pack: core
----
-
 ## CORE-SCOPE — Scope
 <!-- rule: severity=blocking; scope=all -->
 Change only what the task needs. No drive-by refactors, renames or reformatting of untouched code; report those as open points. Remove what your change made unused, including exports nothing imports anymore.
@@ -12,7 +8,7 @@ Don't add parameters, options, generics, interfaces or config that no current ca
 
 ## CORE-NAMING — Naming
 <!-- rule: severity=blocking; scope=all -->
-Descriptive names in the repository language ({project.language.repo}). Allowed abbreviations: {options.abbreviations}, and `i`/`j` as loop indices. Booleans you declare start with `is`, `has`, `can` or `should`.
+Descriptive names in the repository language (`{project.language.repo}`). Allowed abbreviations: {options.abbreviations}, and `i`/`j` as loop indices. Booleans you declare start with `is`, `has`, `can` or `should`.
 
 ## CORE-STRUCTURE — Structure
 <!-- rule: severity=blocking; scope=all -->
@@ -42,6 +38,18 @@ No requests leave the test process. No sleeps or fixed waits; use fake timers or
 <!-- rule: severity=blocking; scope=all -->
 Don't delete, skip, focus or loosen existing tests. Change an existing assertion only when the spec changes that behaviour, and name each such test in the report.
 
+## CORE-DEPENDENCIES — Dependencies
+<!-- rule: severity=blocking; scope=all -->
+Don't add, remove or change dependencies in package manifests or lockfiles (for example `package.json` and `package-lock.json`). If a task needs one, stop and report it (status `blocked`).
+
+## CORE-REPRODUCIBLE-BUILDS — Reproducible builds
+<!-- rule: severity=blocking; scope=paths:**/Dockerfile*|**/*compose*.y*ml|.github/workflows/**|**/.gitlab-ci.yml -->
+Container and CI images use a full version tag or a digest (for example `node:22.13.1-alpine`). No `latest` and no major-only tags.
+
+## CORE-LANGUAGE — Language
+<!-- rule: severity=blocking; scope=all -->
+Everything in the repository is written in the repository language (`{project.language.repo}`): code, comments, identifiers, commits, log and error strings, developer docs and dev-tooling UI. User-facing product copy (UI labels, translation files, editorial content) follows the product language (`{project.language.productCopy}`). Don't mix languages within a file; report an existing mix as an open point.
+
 ## CORE-SECRETS — Secrets
 <!-- rule: severity=blocking; scope=all; protected=true -->
 Never commit secrets, credentials, certificates or private keys; configuration comes from environment variables, CI variables or a secret manager.
@@ -53,7 +61,3 @@ Never build HTML, shell commands or queries from input by concatenation or strin
 ## CORE-LOGGING — Logging
 <!-- rule: severity=blocking; scope=all; protected=true -->
 Never log tokens, passwords, `Authorization` or `Cookie` headers, request bodies, or personal data such as names, e-mails or addresses.
-
-## CORE-LANGUAGE — Language
-<!-- rule: severity=blocking; scope=all -->
-Everything in the repository is written in {project.language.repo}: code, comments, identifiers, commits, log and error strings, developer docs and dev-tooling UI. User-facing product copy (UI labels, translation files, editorial content) follows the product's language ({project.language.productCopy}). Don't mix languages within a file; report an existing mix as an open point.

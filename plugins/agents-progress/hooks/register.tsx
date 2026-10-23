@@ -1,19 +1,18 @@
-// agents-progress: the Agents pane and the task band for the dev workflow. Tasks, phases, review
-// rounds and step progress come from the workflow state that `cw` writes; agent runs come from the
-// engine's events. Event handling and the pane's layout are adapted from the MIT-licensed
-// savvy-progress mod; see the notice in ./avatars.ts and the README.
+// agents-progress: the Agents pane and the task band of the dev-workflow plugin (docs/PLAN.md §11).
+// Event handling and the pane's layout are adapted from the MIT-licensed savvy-progress mod; see the
+// notice in ./avatars.ts and the README. The tasks come from dev-workflow's state file; the mod
+// makes no network call and runs no git fetch.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { AgentRun } from '../types'
-import { CRAB_CSS, avatarOf, crab, parseAgentType } from './avatars'
-import { age, foreignClaims, isActive, isPlanned, parseState, taskOfRun } from './state'
-import type { ForeignClaim, TaskState } from './state'
+import type { AgentRun, StateSource } from '../types'
+import { CRAB_CSS, avatarOf, crab } from './avatars'
+import { CONFIG, ancestorsOf, bandLine, isActive, parseState, roleOf, taskOfAgent } from './state'
 
+const NO_SOURCE: StateSource = { path: null, mtimeMs: 0, reads: 0 }
 const agents = atom({ plugin: 'agents-progress', key: 'agents' } as const, [])
 const tasks = atom({ plugin: 'agents-progress', key: 'tasks' } as const, [])
-const claims = atom({ plugin: 'agents-progress', key: 'claims' } as const, [])
-const source = atom({ plugin: 'agents-progress', key: 'source' } as const, { commonDir: '', mtimeMs: 0, claimsAt: 0 })
+const source = atom({ plugin: 'agents-progress', key: 'source' } as const, NO_SOURCE)
 const hasAutoOpened = atom({ plugin: 'agents-progress', key: 'hasAutoOpened' } as const, false)
 const now = atom({ plugin: 'agents-progress', key: 'now' } as const, 0)
 
@@ -21,8 +20,6 @@ const PANE = 'agents-progress'
 const PANE_TITLE = 'Agents'
 const ACCENT = '#8f8cf4'
 const STATUS_COLOR = { running: ACCENT, done: '#3B9C5F', failed: '#D0453F' } as const
-const CLAIMS_EVERY_MS = 120_000
-const MAX_CLAIMS = 12
 
 // The status dot pulses while the agent runs, unless the system asks for reduced motion.
 const STATUS_CSS = `<style>
@@ -40,73 +37,54 @@ const AVATAR_WIDTH = 44
 const AVATAR_HEIGHT = 36
 const BAR_HEIGHT = 6
 
-const TIER_LABEL: Record<string, string> = { s: 'S', m: 'M', l: 'L', xl: 'XL' }
-
-// Re-reads state.json when its modification time changed. Never throws: a missing or broken file
-// keeps the last good state.
-async function refreshState($: EngineInterface): Promise<void> {
-  const current = await read($, source)
-  if (!current.commonDir) return
-  const path = `${current.commonDir}/dev-workflow/state.json`
-  try {
-    const stat = await $.fs.stat(path)
-    if (stat.mtimeMs === current.mtimeMs) return
-    const parsed = parseState(String(await $.fs.read(path)))
-    await update($, source, value => ({ ...value, mtimeMs: stat.mtimeMs }))
-    if (!parsed) return
-    await update($, tasks, () => parsed)
-    $.ui.invalidate('ui.render')
-  } catch {
-    // No state yet (no task started in this repository).
+// The state file: the nearest directory with the project config, then its git common dir, which
+// `git rev-parse --git-common-dir` answers in a linked worktree too (S5).
+async function locate($: EngineInterface): Promise<string | null> {
+  for (const dir of ancestorsOf(await $.session.cwd())) {
+    if (!(await $.fs.exists(`${dir === '/' ? '' : dir}/${CONFIG}`))) continue
+    const git = await $.process.run(['git', '-C', dir, 'rev-parse', '--path-format=absolute', '--git-common-dir']).catch(() => null)
+    const common = git?.exitCode === 0 ? git.stdout.trim() : ''
+    return common ? `${common}/dev-workflow/state.json` : null
   }
+  return null
 }
 
-// Fetches the claims of all sessions and keeps the ones this checkout doesn't work on.
-async function refreshClaims($: EngineInterface): Promise<void> {
-  const current = await read($, source)
-  if (!current.commonDir) return
-  try {
-    await $.process.run(['git', 'fetch', '--quiet', '--prune', 'origin', '+refs/claims/*:refs/dw/claims/*'], { timeoutMs: 20_000 })
-    const refs = await $.process.run(['git', 'for-each-ref', '--format=%(objectname)', 'refs/dw/claims/'], { timeoutMs: 10_000 })
-    const shas = refs.stdout.split('\n').filter(Boolean).slice(0, MAX_CLAIMS)
-    const payloads: string[] = []
-    for (const sha of shas) {
-      const blob = await $.process.run(['git', 'cat-file', '-p', `${sha}:claim.json`], { timeoutMs: 10_000 })
-      if (blob.exitCode === 0) payloads.push(blob.stdout)
-    }
-    const own = new Set((await read($, tasks)).map(task => task.ticket))
-    const at = await $.clock.now()
-    await update($, claims, () => foreignClaims(payloads, own, at))
-    $.ui.invalidate('ui.render')
-  } catch {
-    // Offline or no remote: keep the last result.
+// Reads the state file when its mtime changed, or always with `force`. A missing file shows no task;
+// invalid JSON keeps the last good tasks. `$.fs.stat` rejects a missing file, so `exists` comes first.
+async function refresh($: EngineInterface, force = false): Promise<void> {
+  const { path, mtimeMs } = await read($, source)
+  if (!path) return
+  if (!(await $.fs.exists(path))) {
+    if (mtimeMs === 0) return
+    await update($, source, current => ({ ...current, mtimeMs: 0 }))
+    await update($, tasks, () => [])
+    return
   }
+  const stat = await $.fs.stat(path).catch(() => null)
+  if (!stat || (!force && stat.mtimeMs === mtimeMs)) return
+  const content = await $.fs.read(path).catch(() => null)
+  await update($, source, current => ({ ...current, mtimeMs: stat.mtimeMs, reads: current.reads + 1 }))
+  const parsed = content === null ? null : parseState(content)
+  if (parsed) await update($, tasks, () => parsed)
 }
 
 export const register: Register = on => {
   on('session.start', async ($, event, next) => {
     const started = await next(event)
-    try {
-      const result = await $.process.run(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], { timeoutMs: 10_000 })
-      if (result.exitCode === 0) {
-        const commonDir = result.stdout.trim()
-        await update($, source, value => ({ ...value, commonDir }))
-      }
-    } catch {
-      // Not a git repository: only the generic agents pane works.
+    await update($, source, () => NO_SOURCE)
+    await update($, tasks, () => [])
+    const path = await locate($)
+    if (path) {
+      await update($, source, current => ({ ...current, path }))
+      await refresh($)
     }
-    await refreshState($)
+    // Every second: the state file, and the elapsed time of running agents.
     $.clock.every(1000, async () => {
-      await refreshState($)
+      await refresh($)
       const list = await read($, agents)
+      if (!list.some(run => run.status === 'running')) return
       const at = await $.clock.now()
-      if (list.some(run => run.status === 'running')) await update($, now, () => at)
-      const current = await read($, source)
-      const isIdle = !list.some(run => run.status === 'running')
-      if (isIdle && current.commonDir && at - current.claimsAt > CLAIMS_EVERY_MS) {
-        await update($, source, value => ({ ...value, claimsAt: at }))
-        await refreshClaims($)
-      }
+      await update($, now, () => at)
     })
     // Registered last: a refused name throws and would skip what follows.
     await $.command.register({ name: 'agents-progress', description: 'Show or hide the Agents pane', immediate: true })
@@ -125,11 +103,10 @@ export const register: Register = on => {
     return {}
   })
 
-  // A cw command may have changed the workflow state: read it right away instead of on the next tick.
+  // A cw call changes the state file: read it right away instead of at the next tick.
   on('tool.call', { tool: 'Bash' }, async ($, event, next) => {
     const result = await next(event)
-    const command = typeof event.command === 'string' ? event.command.trim() : ''
-    if (/^(cw|.*\/cw)\s/.test(command)) await refreshState($)
+    if (/^\s*cw\s/.test(event.command)) await refresh($, true)
     return result
   })
 
@@ -153,14 +130,15 @@ export const register: Register = on => {
     await update($, agents, list => [...list.filter(item => item.id !== run.id), run])
     await update($, now, () => at)
 
-    const isWorkflowAgent = parseAgentType(event.subagentType).role !== null
-    if (!isWorkflowAgent || (await read($, hasAutoOpened))) return started
+    // The pane opens by itself once per session, at the first workflow agent.
+    if (!roleOf(event.subagentType) || (await read($, hasAutoOpened))) return started
     await update($, hasAutoOpened, () => true)
     await $.ui.open({ id: PANE, title: PANE_TITLE })
     return started
   })
 
-  // agent.spawn does not fire when SendMessage resumes an agent, so the agent shows as running again here.
+  // agent.spawn does not fire when SendMessage resumes an agent, so the agent shows as running
+  // again here. Rounds come from the state file.
   on('tool.call', { tool: 'SendMessage' }, async ($, event, next) => {
     const result = await next(event)
     if (result.deny !== undefined || result.isError) return result
@@ -224,10 +202,9 @@ export const register: Register = on => {
     const ui = $.ui.resolve(event)
     const { Box, Text } = ui
     const list = await read($, agents)
-    const taskList: TaskState[] = await read($, tasks)
-    const planned = taskList.filter(isPlanned)
-    if (list.length === 0 && planned.length === 0) return <Text dimColor>No subagents yet.</Text>
+    if (list.length === 0) return <Text dimColor>No subagents yet.</Text>
 
+    const known = await read($, tasks)
     const at = Math.max(await read($, now), ...list.map(run => run.startedAt), 0)
     // Running agents first, newest first within each group.
     const ordered = [
@@ -240,23 +217,22 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Text dimColor>{`${runningCount} running · ${list.length - runningCount} finished${planned.length ? ` · ${planned.length} planned` : ''}`}</Text>
+        <Text dimColor>{`${runningCount} running · ${list.length - runningCount} finished`}</Text>
         {ordered.map(run => {
-          const linked = taskOfRun(taskList, run)
-          const avatar = avatarOf(run.type, linked?.task.areas ?? [])
-          const parsed = parseAgentType(run.type)
+          const task = taskOfAgent(known, run.agentId)
+          const role = roleOf(run.type)
+          const avatar = avatarOf(run.type, role?.kind === 'implementer' ? task?.areas : [])
           const modelMatch = /(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(run.model)
           const [, family = '', major = '', minor] = modelMatch ?? []
           const modelLabel = family
             ? `${family.charAt(0).toUpperCase()}${family.slice(1).toLowerCase()} ${major}${minor ? '.' + minor : ''}`
             : run.model.replace(/^claude-/, '') || '—'
-          const meta = [parsed.role ? `${parsed.role}${parsed.tier ? ` · ${TIER_LABEL[parsed.tier] ?? parsed.tier}` : ''}` : run.type, modelLabel]
+          const meta = [run.type, modelLabel]
           if (run.effort) meta.push(run.effort)
-          if (linked && linked.role === 'reviewer' && linked.task.round > 1) meta.push(`Round ${linked.task.round}`)
+          // The rounds of its task, from the state file: implementer rounds, review rounds.
+          if (task && role?.kind === 'implementer' && task.round > 1) meta.push(`Round ${task.round}`)
+          if (task && role?.kind === 'reviewer' && task.reviewRound > 1) meta.push(`Round ${task.reviewRound}/${task.maxReviewRounds}`)
           meta.push(run.status)
-          const steps = linked && linked.role === 'implementer' && run.status === 'running' && linked.task.steps.done > 0
-            ? ` · step ${linked.task.steps.done}/${linked.task.steps.total}${linked.task.steps.note ? ` ${linked.task.steps.note}` : ''}`
-            : ''
 
           const percent = run.contextMax ? Math.min(100, Math.round((run.contextTokens / run.contextMax) * 100)) : 0
           const tokens = run.tokens >= 1e6 ? `${(run.tokens / 1e6).toFixed(1)}M` : run.tokens >= 1e3 ? `${Math.round(run.tokens / 1e3)}k` : `${run.tokens}`
@@ -277,7 +253,7 @@ export const register: Register = on => {
                 height={AVATAR_HEIGHT}
               />
             ) : (
-              // The terminal shows the badge alone, to keep the scope small.
+              // The terminal shows the badge alone (docs/PLAN.md §11).
               <Text color={avatar.accent} bold>
                 {avatar.badge ? `[${avatar.badge}]` : '[·]'}
               </Text>
@@ -310,7 +286,7 @@ export const register: Register = on => {
                   {run.description || run.type}
                 </Text>
                 <Text dimColor wrap="truncate-end">
-                  {meta.join(' · ') + steps}
+                  {meta.join(' · ')}
                 </Text>
                 <Box key={`bar-${run.id}`} flexDirection="row" gap={1}>
                   {barElement}
@@ -322,48 +298,27 @@ export const register: Register = on => {
             </Box>
           )
         })}
-        {planned.length > 0 ? (
-          <Box flexDirection="column" marginTop={1}>
-            <Text dimColor>Planned</Text>
-            {planned.map(task => (
-              <Text key={`planned-${task.id}`} wrap="truncate-end">
-                {`· ${task.ticket} · ${task.title}${task.complexity ? ` · ${TIER_LABEL[task.complexity] ?? task.complexity}` : ''} · ${task.phase}`}
-              </Text>
-            ))}
-          </Box>
-        ) : null}
       </Box>
     )
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, event, next) => {
     const active = (await read($, tasks)).filter(isActive)
-    const foreign: ForeignClaim[] = await read($, claims)
-    if ((active.length === 0 && foreign.length === 0) || event.props.hasSurvey) return next(event)
+    if (active.length === 0 || event.props.hasSurvey) return next(event)
     const { Box, Text, Link } = $.ui.resolve(event)
-    const at = await $.clock.now()
     // Later mods draw in the band too: keep their drawing under ours.
     const others = await next(event)
     return (
       <Box flexDirection="column">
-        {active.map(task => (
-          <Box key={task.id} flexDirection="row" gap={1}>
-            <Text color={task.phase === 'escalated' ? STATUS_COLOR.failed : ACCENT}>●</Text>
-            <Text wrap="truncate-end">
-              {[task.ticket, task.title, task.phase]
-                .concat(task.phase === 'review' && task.round ? [`Round ${task.round}/${task.maxRounds}`] : [])
-                .concat(task.phase === 'implement' && task.steps.done ? [`step ${task.steps.done}/${task.steps.total}`] : [])
-                .concat(task.complexity ? [TIER_LABEL[task.complexity] ?? task.complexity] : [])
-                .join(' · ')}
+        {active.map(bandLine).map(line => (
+          <Box key={line.key} flexDirection="row" gap={1}>
+            <Text color={line.isFailure ? STATUS_COLOR.failed : ACCENT}>●</Text>
+            <Text color={line.isFailure ? STATUS_COLOR.failed : undefined} wrap="truncate-end">
+              {line.text}
             </Text>
-            {task.prUrl ? <Link href={task.prUrl} label="PR" /> : null}
+            {line.prUrl ? <Link href={line.prUrl} label="PR/MR" /> : null}
           </Box>
         ))}
-        {foreign.length > 0 ? (
-          <Text dimColor wrap="truncate-end">
-            {`elsewhere: ${foreign.map(claim => `${claim.ticket} · ${claim.phase} · ${claim.host} · ${age(claim.since, at)}${claim.isStale ? ' (stale)' : ''}`).join('  ·  ')}`}
-          </Text>
-        ) : null}
         {others}
       </Box>
     )

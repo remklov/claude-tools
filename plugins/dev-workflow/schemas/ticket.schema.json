@@ -1,0 +1,18 @@
+{
+  "title": "Ticket snapshot (cw ticket save, stdin); the orchestrator maps the Jira or Linear issue, or the local ticket file, to it (D6, ADR 0009)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["key", "summary"],
+  "properties": {
+    "key": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "acceptanceCriteria": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "status": { "type": "string" },
+    "assignee": { "type": ["string", "null"] },
+    "url": { "type": "string", "pattern": "^https://" },
+    "source": { "enum": ["jira", "linear", "local", "pasted", "notes"] },
+    "path": { "type": "string", "minLength": 1 },
+    "context": { "type": "string", "minLength": 1 }
+  }
+}

@@ -1,10 +1,7 @@
 {
   "name": "dev-workflow",
-  "displayName": "Dev Workflow",
-  "version": "0.1.0",
-  "description": "Orchestrated development workflow: generalist agents with role playbooks, stack packs and deterministic scripts (cw).",
+  "version": "0.3.0",
+  "description": "Orchestrated multi-agent development workflow: generalist implementer and reviewer agents, role playbooks, stack rule packs and the deterministic cw CLI. Start a task with /dev-workflow:ticket <TICKET-KEY | NO-TICKET>.",
   "author": { "name": "Benedikt Volkmer" },
-  "repository": "https://github.com/remklov/claude-tools",
-  "license": "MIT",
-  "keywords": ["workflow", "orchestration", "subagents", "playbooks"]
+  "license": "MIT"
 }

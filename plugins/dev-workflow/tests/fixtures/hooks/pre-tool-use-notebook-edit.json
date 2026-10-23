@@ -1,0 +1,14 @@
+{
+  "session_id": "{{session}}",
+  "transcript_path": "{{transcript}}",
+  "cwd": "{{cwd}}",
+  "prompt_id": "c0531d21-9cd1-4545-b3b7-421b55202b8e",
+  "permission_mode": "acceptEdits",
+  "agent_id": "{{agentId}}",
+  "agent_type": "{{agentType}}",
+  "effort": { "level": "medium" },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "NotebookEdit",
+  "tool_input": { "notebook_path": "{{file}}", "new_source": "print(1)", "edit_mode": "replace" },
+  "tool_use_id": "toolu_01NotebookEditFixture0000"
+}

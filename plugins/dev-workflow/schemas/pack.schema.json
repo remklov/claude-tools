@@ -1,223 +1,120 @@
 {
-  "$comment": "dev-workflow stack pack manifest (packs/<id>/pack.json).",
+  "title": "dev-workflow stack pack manifest (packs/<id>/pack.json)",
+  "$comment": "Procedures are found by directory, not listed here: packs/<id>/procedures/<orchestrator|implementer|reviewer>/*.md. cw validates manifests with this schema plus the cross-field checks in cli/lib/packs.mjs (id equals the directory, defaultVariant names a variant, checkDiscovery and scopeScripts name scripts, defaults match their option type, listed files exist, testRunner.single is a usable template, detect globs compile) and, when the pack resolves, that its complexity paths compile with the options filled in.",
   "type": "object",
-  "required": [
-    "id",
-    "version",
-    "title"
-  ],
   "additionalProperties": false,
+  "required": ["id", "version", "title"],
   "properties": {
-    "id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
-    },
-    "version": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+"
-    },
-    "title": {
-      "type": "string"
-    },
-    "description": {
-      "type": "string"
-    },
-    "requires": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$" },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "requires": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" } },
+    "conflicts": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" } },
+    "detect": {
+      "description": "any-of: a file glob in the work repo, or a dependency (optionally of one major version) in a package.json",
       "type": "array",
       "items": {
-        "type": "string"
+        "description": "{ glob } or { dependency, major? }",
+        "oneOf": [
+          { "type": "object", "additionalProperties": false, "required": ["glob"], "properties": { "glob": { "type": "string", "minLength": 1 } } },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dependency"],
+            "properties": { "dependency": { "type": "string", "minLength": 1 }, "major": { "type": "string", "pattern": "^[0-9]+$" } }
+          }
+        ]
       }
     },
-    "conflicts": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
+    "areas": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } },
     "variants": {
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": [
-          "description"
-        ],
         "additionalProperties": false,
+        "required": ["description"],
         "properties": {
-          "description": {
-            "type": "string"
-          },
-          "rules": {
-            "type": "string"
-          },
+          "description": { "type": "string", "minLength": 1 },
+          "rules": { "type": "string", "minLength": 1 },
           "detect": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "description": "{ glob } or { dependency, major? }",
+              "oneOf": [
+                { "type": "object", "additionalProperties": false, "required": ["glob"], "properties": { "glob": { "type": "string", "minLength": 1 } } },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["dependency"],
+                  "properties": { "dependency": { "type": "string", "minLength": 1 }, "major": { "type": "string", "pattern": "^[0-9]+$" } }
+                }
+              ]
+            }
           }
         }
       }
     },
-    "defaultVariant": {
-      "type": "string"
-    },
+    "defaultVariant": { "type": "string", "minLength": 1 },
     "options": {
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": [
-          "type",
-          "description"
-        ],
         "additionalProperties": false,
+        "required": ["type", "description"],
         "properties": {
-          "type": {
-            "enum": [
-              "string",
-              "number",
-              "boolean",
-              "array",
-              "object"
-            ]
-          },
-          "required": {
-            "type": "boolean"
-          },
+          "type": { "enum": ["string", "number", "boolean", "array", "object"] },
+          "required": { "type": "boolean" },
           "default": {},
-          "description": {
-            "type": "string"
-          }
+          "description": { "type": "string", "minLength": 1 }
         }
       }
     },
-    "detect": {
-      "type": "array"
-    },
-    "areas": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
-    "rules": {
-      "type": "string"
-    },
-    "playbooks": {
+    "rules": { "type": "string", "minLength": 1 },
+    "scripts": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^scripts/[^/]+\\.mjs$" } },
+    "checkDiscovery": { "description": "the name of the script cw init runs to suggest checks", "type": "string", "minLength": 1 },
+    "scopeScripts": { "description": "names of scripts the reviewer's cw review scope runs (§6 R1)", "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "testRunner": {
       "type": "object",
       "additionalProperties": false,
-      "properties": {
-        "orchestrator": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "implementer": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "reviewer": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "investigator": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "scripts": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "doctor": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "script",
-          "description"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "script": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          }
-        }
-      }
+      "required": ["single"],
+      "properties": { "single": { "description": "single-test command: {file} required, optional [ … {name} … ] segment ({file} outside it); a placeholder is either quoted on its own (\"{file}\") or unquoted with no quote, $ or \\ next to it (./{file} is fine, \"./{file}\" and \"./\"{file} are not)", "type": "string", "minLength": 1 } }
     },
     "guards": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "commands": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "ports": {
-          "type": "array",
-          "items": {
-            "type": "integer"
-          }
-        },
-        "dependencyCommands": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "complexity": {
-      "type": "array"
-    },
-    "checkDiscovery": {
-      "type": "string"
-    },
-    "testRunner": {
-      "type": "object",
-      "properties": {
-        "single": {
-          "type": "string"
-        },
-        "nameFlag": {
-          "type": "string"
-        }
+        "dependencyCommands": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "commands": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ports": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 65535 } }
       }
     },
     "settings": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "allow": {
+        "allow": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ask": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "deny": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "complexity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "escalate": {
+          "description": "the same items as config complexity.escalate; paths may use {options.x}",
           "type": "array",
           "items": {
-            "type": "string"
-          }
-        },
-        "ask": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "deny": {
-          "type": "array",
-          "items": {
-            "type": "string"
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["min", "reason"],
+            "properties": {
+              "paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "keywords": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "min": { "enum": ["s", "m", "l", "xl"] },
+              "reason": { "type": "string", "minLength": 1 }
+            }
           }
         }
       }

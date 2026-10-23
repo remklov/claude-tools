@@ -1,39 +1,42 @@
 {
-  "$comment": "Reviewer result saved by cw review save (spec 01 §9).",
+  "title": "Reviewer result piped to cw review save (docs/PLAN.md §6 R8); cw adds the checks, recheck and rule facts and saves review-<round>.json",
   "type": "object",
-  "required": ["kind", "version", "task", "round", "status", "checks", "acceptanceCriteria", "rulesChecked", "findings"],
+  "additionalProperties": false,
+  "required": ["status", "acceptanceCriteria", "rulesChecked", "findings"],
   "properties": {
-    "kind": { "const": "review" },
-    "version": { "const": 1 },
-    "task": { "type": "string" },
-    "round": { "type": "integer", "minimum": 1 },
     "status": { "enum": ["approved", "changes_requested"] },
-    "checks": {
-      "type": "array",
-      "items": { "type": "object", "required": ["package", "check", "result"], "properties": { "result": { "enum": ["pass", "fail", "timeout"] } } }
-    },
     "acceptanceCriteria": {
       "type": "array",
-      "items": { "type": "object", "required": ["id", "met", "evidence"], "properties": { "id": { "type": "string" }, "met": { "type": "boolean" }, "evidence": { "type": "string" } } }
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "met", "evidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^AC[1-9][0-9]*$" },
+          "met": { "type": "boolean" },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
     },
-    "mutations": { "type": "array" },
-    "rulesChecked": { "type": "array", "items": { "type": "string" } },
+    "rulesChecked": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$" } },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["id", "severity", "rule", "issue"],
         "properties": {
-          "id": { "type": "string" },
+          "id": { "type": "string", "pattern": "^F[1-9][0-9]*$" },
           "severity": { "enum": ["blocking", "non_blocking"] },
-          "rule": { "type": "string" },
-          "file": { "type": "string" },
-          "line": { "type": "integer" },
-          "issue": { "type": "string" },
+          "rule": { "type": "string", "pattern": "^(spec|scope|git|correctness|security|[A-Z][A-Z0-9]*(-[A-Z0-9]+)+)$" },
+          "file": { "type": "string", "minLength": 1 },
+          "line": { "type": "integer", "minimum": 1 },
+          "issue": { "type": "string", "minLength": 1 },
           "suggestion": { "type": "string" },
           "sendAlong": { "type": "boolean" }
         }
       }
-    }
+    },
+    "summary": { "type": "string" }
   }
 }

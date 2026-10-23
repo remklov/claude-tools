@@ -2,17 +2,10 @@
   "id": "vitest",
   "version": "0.1.0",
   "title": "Vitest",
-  "detect": [
-    {
-      "dependency": "vitest"
-    }
-  ],
+  "description": "Rules against focused tests and sleeps, the single-test command for cw prove, and the no-focus scan for the reviewer.",
+  "detect": [{ "dependency": "vitest" }],
   "rules": "rules.md",
-  "scripts": {
-    "no-focus": "scripts/no-focus.mjs"
-  },
-  "testRunner": {
-    "single": "npx vitest run {file}",
-    "nameFlag": "-t"
-  }
+  "scripts": { "no-focus": "scripts/no-focus.mjs" },
+  "scopeScripts": ["no-focus"],
+  "testRunner": { "single": "npx vitest run {file} [-t \"{name}\"]" }
 }

@@ -1,7 +1,3 @@
----
-pack: react-vite
----
-
 ## REACT-A11Y — Accessibility
 <!-- rule: severity=blocking; scope=areas:frontend -->
 Use semantic elements: actions are `<button>`, navigation is `<a>` or the router's link. Every form control has an associated `<label>` or `aria-label` (a placeholder is not a label). Meaningful images have descriptive `alt` text; decorative ones have `alt=""`.
@@ -13,6 +9,10 @@ Use semantic elements: actions are `<button>`, navigation is `<a>` or the router
 ## REACT-EFFECT-CLEANUP — Effects that fetch
 <!-- rule: severity=blocking; scope=areas:frontend -->
 An effect that fetches has a cleanup that aborts (`AbortController`) or sets an ignore flag, and sets no state after that (check `signal.aborted` in `catch`). It shows non-ok responses and rejections as an error state.
+
+## REACT-NO-RAW-HTML — No raw HTML
+<!-- rule: severity=blocking; scope=areas:frontend; protected=true -->
+No `dangerouslySetInnerHTML`. Render text through JSX, which escapes it.
 
 ## VITE-ENV-SECRETS — No secrets in the client bundle
 <!-- rule: severity=blocking; scope=areas:frontend; protected=true -->

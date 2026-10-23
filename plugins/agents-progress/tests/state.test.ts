@@ -1,60 +1,98 @@
 import { expect, test } from 'claude-code/testing'
 
-import { foreignClaims, isActive, isPlanned, parseState, taskOfRun } from '../hooks/state'
+import { ancestorsOf, bandLine, isActive, parseState, roleOf, taskOfAgent } from '../hooks/state'
 
-const STATE = JSON.stringify({
-  version: 1,
-  updatedAt: '2026-10-18T09:40:00Z',
-  tasks: [
-    {
-      id: 'nv-9-cre-totaliva', ticket: 'NV-9', title: 'Fix the CRE totalIva', phase: 'review', round: 2, maxRounds: 3,
-      complexity: 'l', areas: ['backend'], prUrl: null,
-      agents: { implementer: 'a1', reviewer: 'r1' }, descriptions: { implementer: 'NV-9 · Fix the CRE totalIva', reviewer: 'Review · NV-9 · Fix the CRE totalIva' },
-      steps: { done: 9, total: 9, note: 'report done' }, parent: null,
-    },
-    { id: 'app-2-counts', ticket: 'APP-2', title: 'Pending counts', phase: 'classify', round: 0, complexity: null, areas: [], agents: {}, descriptions: {}, steps: { done: 0, total: 9, note: '' } },
-    { id: 'broken', phase: 'nonsense' },
-  ],
+const TASK = {
+  id: 'APP-42__feature__login',
+  ticket: 'APP-42',
+  title: 'Add login',
+  branch: 'APP-42/feature/login',
+  phase: 'implement',
+  outcome: null,
+  round: 1,
+  reviewRound: 0,
+  maxReviewRounds: 3,
+  complexity: 'm',
+  areas: ['frontend'],
+  agents: { implementer: 'impl-1', reviewer: null },
+  descriptions: { implementer: null, reviewer: null },
+  steps: { done: 3, total: 8, note: 'tests written' },
+  prUrl: null,
+  updatedAt: '2026-10-22T10:00:00.000Z',
+  endedAt: null,
+}
+
+const state = (...tasks: unknown[]) => JSON.stringify({ version: 1, updatedAt: '2026-10-22T10:00:00.000Z', tasks })
+
+test('roleOf reads the dev-workflow agents and their tier, nothing else', () => {
+  for (const tier of ['s', 'm', 'l', 'xl'] as const) expect(roleOf(`dev-workflow:implementer-${tier}`)).toEqual({ kind: 'implementer', tier })
+  expect(roleOf('dev-workflow:reviewer')).toEqual({ kind: 'reviewer' })
+  for (const other of ['dev-workflow:implementer-xxl', 'implementer-m', 'reviewer', 'other:reviewer', 'Explore', 'general-purpose']) {
+    expect(roleOf(other)).toBeNull()
+  }
 })
 
-test('a valid state file parses; unknown phases are dropped', () => {
-  const tasks = parseState(STATE)
-  expect(tasks?.map(task => task.id)).toEqual(['nv-9-cre-totaliva', 'app-2-counts'])
-  expect(tasks?.[0]?.round).toBe(2)
-  expect(tasks?.[1]?.maxRounds).toBe(3)
+test('parseState keeps the fields the mod draws from, with defaults for missing counts', () => {
+  const [task] = parseState(state(TASK)) ?? []
+  expect(task).toEqual({
+    id: TASK.id,
+    ticket: 'APP-42',
+    title: 'Add login',
+    branch: 'APP-42/feature/login',
+    phase: 'implement',
+    outcome: null,
+    round: 1,
+    reviewRound: 0,
+    maxReviewRounds: 3,
+    complexity: 'm',
+    areas: ['frontend'],
+    agents: { implementer: 'impl-1', reviewer: null },
+    steps: { done: 3, total: 8 },
+    prUrl: null,
+  })
+  const [bare] = parseState(state({ id: 'x', ticket: 'NO-TICKET', title: 'T', phase: 'spec' })) ?? []
+  expect(bare).toMatchObject({ branch: 'x', outcome: null, round: 0, reviewRound: 0, maxReviewRounds: 3, complexity: null, areas: [], steps: null })
 })
 
-test('invalid content returns null so the last good state stays', () => {
-  expect(parseState('{ not json')).toBe(null)
-  expect(parseState(JSON.stringify({ version: 2, tasks: [] }))).toBe(null)
+test('parseState refuses invalid JSON and a wrong shape, and skips a task without its keys', () => {
+  expect(parseState('{"tasks": [')).toBeNull()
+  expect(parseState('[]')).toBeNull()
+  expect(parseState('{"tasks": {}}')).toBeNull()
+  expect(parseState(state({ id: 'x', ticket: 'K', phase: 'spec' }))).toEqual([])
+  expect(parseState(state(TASK, 'not a task'))?.map(task => task.id)).toEqual([TASK.id])
 })
 
-test('a PR link is kept only when it is https', () => {
-  const tasks = parseState(JSON.stringify({ version: 1, tasks: [{ id: 'x', phase: 'deliver', prUrl: 'javascript:alert(1)' }, { id: 'y', phase: 'deliver', prUrl: 'https://github.com/o/r/pull/1' }] }))
-  expect(tasks?.map(task => task.prUrl)).toEqual([null, 'https://github.com/o/r/pull/1'])
+test('a task is active until it has an outcome, and an agent finds its task by id', () => {
+  const [active, ended] = parseState(state(TASK, { ...TASK, id: 'old', outcome: 'done', phase: 'done' })) ?? []
+  expect([active, ended].map(task => task !== undefined && isActive(task))).toEqual([true, false])
+  const tasks = parseState(state(TASK, { ...TASK, id: 'b', agents: { implementer: 'impl-2', reviewer: 'rev-2' } })) ?? []
+  expect(taskOfAgent(tasks, 'rev-2')?.id).toBe('b')
+  expect(taskOfAgent(tasks, 'impl-1')?.id).toBe(TASK.id)
+  expect(taskOfAgent(tasks, 'nobody')).toBeUndefined()
+  expect(taskOfAgent(tasks, undefined)).toBeUndefined()
 })
 
-test('runs link to tasks by agent id, else by the description cw printed', () => {
-  const tasks = parseState(STATE) ?? []
-  expect(taskOfRun(tasks, { agentId: 'r1', description: 'whatever' })?.role).toBe('reviewer')
-  expect(taskOfRun(tasks, { agentId: 'new', description: 'NV-9 · Fix the CRE totalIva' })?.role).toBe('implementer')
-  expect(taskOfRun(tasks, { agentId: 'x', description: 'other' })).toBe(null)
+test('the band line names ticket, title, phase, the review round, the tier and, in implement, the step', () => {
+  const [implement] = parseState(state(TASK)) ?? []
+  expect(implement && bandLine(implement)).toEqual({ key: TASK.id, text: 'APP-42 · Add login · implement · M · step 3/8', isFailure: false, prUrl: null })
+  const [review] = parseState(state({ ...TASK, phase: 'review', reviewRound: 2, steps: null })) ?? []
+  expect(review && bandLine(review).text).toBe('APP-42 · Add login · review · Round 2/3 · M')
+  const [spec] = parseState(state({ ...TASK, phase: 'spec', steps: { done: 0, total: 8 } })) ?? []
+  expect(spec && bandLine(spec).text).toBe('APP-42 · Add login · spec · M')
+  const [escalated] = parseState(state({ ...TASK, phase: 'escalated', complexity: null })) ?? []
+  expect(escalated && bandLine(escalated)).toMatchObject({ text: 'APP-42 · Add login · escalated', isFailure: true })
 })
 
-test('active and planned phases', () => {
-  const tasks = parseState(STATE) ?? []
-  expect(tasks.filter(isActive).length).toBe(2)
-  expect(tasks.filter(isPlanned).map(task => task.ticket)).toEqual(['APP-2'])
+test('the band links only an https PR/MR', () => {
+  const [https] = parseState(state({ ...TASK, phase: 'deliver', prUrl: 'https://gitlab.example.com/a/b/-/merge_requests/7' })) ?? []
+  expect(https && bandLine(https).prUrl).toBe('https://gitlab.example.com/a/b/-/merge_requests/7')
+  for (const url of ['http://example.com/pr/1', 'javascript:alert(1)', 'not a url']) {
+    const [task] = parseState(state({ ...TASK, prUrl: url })) ?? []
+    expect(task && bandLine(task).prUrl).toBeNull()
+  }
 })
 
-test('foreign claims skip this checkout\'s tickets and mark stale ones', () => {
-  const now = Date.parse('2026-10-18T12:00:00Z')
-  const payloads = [
-    JSON.stringify({ ticket: 'NV-9', phase: 'review', holder: { host: 'here' }, since: '2026-10-18T09:00:00Z' }),
-    JSON.stringify({ ticket: 'OPS-14', phase: 'implement', holder: { host: 'laptop' }, since: '2026-10-18T11:00:00Z', updatedAt: '2026-10-18T11:30:00Z' }),
-    JSON.stringify({ ticket: 'SEC-6', phase: 'spec', holder: { host: 'cloud' }, since: '2026-10-15T09:00:00Z', updatedAt: '2026-10-15T09:00:00Z' }),
-    'garbage',
-  ]
-  const claims = foreignClaims(payloads, new Set(['NV-9']), now)
-  expect(claims.map(claim => [claim.ticket, claim.host, claim.isStale])).toEqual([['OPS-14', 'laptop', false], ['SEC-6', 'cloud', true]])
+test('ancestorsOf walks from a directory up to the root', () => {
+  expect(ancestorsOf('/work/proj/app/')).toEqual(['/work/proj/app', '/work/proj', '/work', '/'])
+  expect(ancestorsOf('/')).toEqual(['/'])
 })

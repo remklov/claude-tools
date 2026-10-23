@@ -2,6 +2,7 @@
   "id": "react-vite",
   "version": "0.1.0",
   "title": "React with Vite",
+  "description": "Accessibility, fetching, effect, raw-HTML and client-secret rules, Testing Library rules, and the UI procedures.",
   "detect": [{ "dependency": "react" }],
   "areas": ["frontend"],
   "variants": {
@@ -10,8 +11,11 @@
   },
   "defaultVariant": "react-19",
   "options": {
-    "vitestGlobals": { "type": "boolean", "default": false, "description": "true if Vitest globals are on (Testing Library then cleans up itself)" }
+    "vitestGlobals": {
+      "type": "boolean",
+      "default": false,
+      "description": "true if Vitest globals are on (Testing Library then cleans up on its own)"
+    }
   },
-  "rules": "rules.md",
-  "playbooks": { "implementer": ["playbooks/implementer/ui-change.md"], "reviewer": ["playbooks/reviewer/ui-review.md"] }
+  "rules": "rules.md"
 }

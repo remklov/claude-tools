@@ -1,7 +1,8 @@
 // Pixel crabs, adapted from the savvy-progress mod
 // (https://github.com/johnnyvizz/claude-kit/tree/main/plugins/savvy-progress):
 // the crab body, the chef, engineer, detective and pirate costumes and their
-// CSS motion. The painter and scientist costumes and the role/area mapping are new.
+// CSS motion. The painter costume and the mapping of the dev-workflow agents
+// to costumes are new.
 //
 // MIT License
 //
@@ -25,27 +26,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-export type Costume = 'painter' | 'chef' | 'engineer' | 'detective' | 'scientist' | 'pirate' | 'plain'
+import { roleOf } from './state'
+
+export type Costume = 'painter' | 'chef' | 'engineer' | 'detective' | 'pirate' | 'plain'
 
 export type Avatar = {
   costume: Costume
   accent: string
-  /** The tier badge (`S` to `XL`), or null for agents without one. */
+  /** The tier badge (`S` to `XL`) of an implementer, or null for other agents. */
   badge: string | null
 }
 
-export type Role = 'implementer' | 'reviewer' | 'investigator' | 'orchestrator'
-
 export const NEUTRAL = '#888780'
 
-// The one place that maps roles, areas and tiers to costumes and colours.
+// The one place that maps agents to costumes and tiers to colours (docs/PLAN.md §11). An
+// implementer dresses for the area of its task, when the task has exactly one.
 const AVATARS: {
-  readonly costumeByRole: Readonly<Record<string, Costume>>
   readonly costumeByArea: Readonly<Record<string, Costume>>
   readonly tier: Readonly<Record<string, { readonly accent: string; readonly badge: string }>>
 } = {
-  costumeByRole: { reviewer: 'detective', investigator: 'scientist', Explore: 'pirate' },
-  costumeByArea: { frontend: 'painter', backend: 'chef', data: 'chef', infra: 'engineer', tooling: 'engineer' },
+  costumeByArea: {
+    frontend: 'painter',
+    backend: 'chef',
+    infra: 'engineer',
+    infrastructure: 'engineer',
+  },
   tier: {
     s: { accent: '#1D9E75', badge: 'S' },
     m: { accent: '#378ADD', badge: 'M' },
@@ -54,26 +59,16 @@ const AVATARS: {
   },
 }
 
-const AGENT_TYPE = /^(?:[^:]+:)?(implementer|reviewer|investigator|orchestrator)(?:-(s|m|l|xl))?$/
-
-// `dev-workflow:implementer-m` → { role: 'implementer', tier: 'm' }; other agent types → role null.
-export function parseAgentType(agentType: string): { role: Role | null; tier: string | null; bare: string } {
-  const bare = agentType.replace(/^[^:]*:/, '')
-  const match = AGENT_TYPE.exec(agentType)
-  if (!match) return { role: null, tier: null, bare }
-  return { role: (match[1] ?? null) as Role | null, tier: match[2] ?? null, bare }
-}
-
+/** The avatar of an agent type; `areas` are the areas of the implementer's task. */
 export function avatarOf(agentType: string, areas: readonly string[] = []): Avatar {
-  const { role, tier, bare } = parseAgentType(agentType)
-  const tierStyle = tier ? AVATARS.tier[tier] : undefined
-  const accent = tierStyle?.accent ?? NEUTRAL
-  const badge = tierStyle?.badge ?? null
-  if (role === 'implementer') {
-    const costumes = [...new Set(areas.map(area => AVATARS.costumeByArea[area]).filter((c): c is Costume => Boolean(c)))]
-    return { costume: costumes.length === 1 ? (costumes[0] ?? 'plain') : 'plain', accent, badge }
+  const role = roleOf(agentType)
+  if (role?.kind === 'reviewer') return { costume: 'detective', accent: NEUTRAL, badge: null }
+  if (role?.kind === 'implementer') {
+    const tier = AVATARS.tier[role.tier]
+    const costume = areas.length === 1 ? (AVATARS.costumeByArea[areas[0] ?? ''] ?? 'plain') : 'plain'
+    return { costume, accent: tier?.accent ?? NEUTRAL, badge: tier?.badge ?? null }
   }
-  return { costume: AVATARS.costumeByRole[role ?? bare] ?? 'plain', accent, badge }
+  return { costume: agentType === 'Explore' ? 'pirate' : 'plain', accent: NEUTRAL, badge: null }
 }
 
 // A 24x18 crab on a 30x28 grid. The body keeps the brand clay; the accent
@@ -139,13 +134,6 @@ const COSTUMES: Record<Costume, (fill: Fill, accent: string) => void> = {
     fill(24, 2, 3, 3, 'rgba(169,214,245,.7)', 'it')
     fill(25, 6, 1, 4, '#7A4A26', 'it')
   },
-  // Scientist in goggles and a lab coat; the flask bubbles.
-  scientist: (fill, accent) => {
-    crabBody(fill, -4, 'it')
-    stamp(fill, 7, 16, ['wwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwww', 'wwwwwwkwwkwwwwww', 'wwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwww'], { w: '#F4F3EE', k: '#C9CCD2' })
-    stamp(fill, 8, 11, ['.gggg...gggg.', 'gaaaagggaaaag', '.gggg...gggg.'], { g: '#3A3A3C', a: accent })
-    stamp(fill, 23, 3, ['.ggg.', '..g..', '..g..', '.gag.', 'gaaag', 'gaaag', '.ggg.'], { g: '#C9CCD2', a: accent }, 'it')
-  },
   // Pirate scouting the code; the cutlass fences.
   pirate: fill => {
     crabBody(fill)
@@ -175,8 +163,6 @@ export const CRAB_CSS = `<style>
 @keyframes scan{25%{transform:translate(-1px,1px)}50%{transform:translate(-2px,2px)}75%{transform:translate(-1px,1px)}}
 .c-pirate.run .it{transform-origin:50% 100%;animation:fence .5s ease-in-out infinite}
 @keyframes fence{50%{transform:rotate(25deg)}}
-.c-scientist.run .it{animation:bub 1s steps(1) infinite}
-@keyframes bub{50%{transform:translateY(-1px)}}
 @media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
 </style>`
 

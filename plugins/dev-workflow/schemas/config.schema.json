@@ -1,0 +1,160 @@
+{
+  "title": "dev-workflow project config (.claude/dev-workflow/config.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "project", "packs", "packages"],
+  "properties": {
+    "version": { "const": 1 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "language": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repo": { "type": "string", "pattern": "^[a-z]{2}$" },
+            "productCopy": { "type": "string", "pattern": "^[a-z]{2}$" }
+          }
+        }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["in-place", "worktree"] },
+        "appRoot": { "type": "string", "minLength": 1 }
+      }
+    },
+    "packs": {
+      "type": "array",
+      "items": {
+        "description": "a pack id, or { id, variant?, options? }",
+        "oneOf": [
+          { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$" },
+              "variant": { "type": "string", "minLength": 1 },
+              "options": { "type": "object" }
+            }
+          }
+        ]
+      }
+    },
+    "packages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path", "areas"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "path": { "type": "string", "minLength": 1 },
+          "areas": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } },
+          "checks": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+          "testSingle": {
+            "description": "single-test command: {file} required, {name} optional; a placeholder is either quoted on its own (\"{file}\") or unquoted with no quote, $ or \\ next to it (./{file} is fine, \"./{file}\" and \"./\"{file} are not)",
+            "type": "string",
+            "minLength": 1
+          },
+          "env": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preset": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "defaultBase": { "type": "string", "minLength": 1 },
+        "noTicketKey": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$" },
+        "host": { "enum": ["github", "gitlab"] }
+      }
+    },
+    "tickets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["jira", "linear", "local"] },
+        "site": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" },
+        "keyPattern": { "type": "string", "minLength": 1 },
+        "contextPath": { "type": "string", "minLength": 1 }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxReviewRounds": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "confirm": { "type": "array", "items": { "enum": ["s", "m", "l", "xl"] } },
+        "maxQuestionsPerRound": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "checkTimeoutMinutes": { "type": "integer", "minimum": 1, "maximum": 240 }
+      }
+    },
+    "guards": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ports": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 65535 } },
+        "commands": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "devServer": { "enum": ["allowed", "never"] }
+      }
+    },
+    "complexity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "escalate": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["min", "reason"],
+            "properties": {
+              "paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "keywords": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+              "min": { "enum": ["s", "m", "l", "xl"] },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "add": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "disable": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "reason"],
+            "properties": { "id": { "type": "string", "minLength": 1 }, "reason": { "type": "string", "minLength": 1 } }
+          }
+        },
+        "extend": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "override": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["file"],
+            "properties": { "file": { "type": "string", "minLength": 1 }, "reason": { "type": "string", "minLength": 1 } }
+          }
+        },
+        "options": { "type": "object", "additionalProperties": { "type": "object" } },
+        "allowProtected": { "type": "boolean" }
+      }
+    }
+  }
+}

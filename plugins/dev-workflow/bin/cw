@@ -1,2 +1,8 @@
-#!/usr/bin/env sh
-exec node "$(dirname "$(readlink -f "$0")")/../scripts/cw.mjs" "$@"
+#!/usr/bin/env node
+// The cw command on the Bash tool's PATH (docs/PLAN.md D10). Node resolves this file's symlinks, so
+// __dirname is the plugin's real bin/ folder and the CLI is found next to it.
+'use strict';
+const { join } = require('node:path');
+const { pathToFileURL } = require('node:url');
+
+import(pathToFileURL(join(__dirname, '..', 'cli', 'cw.mjs')).href).then((cli) => cli.runCli());

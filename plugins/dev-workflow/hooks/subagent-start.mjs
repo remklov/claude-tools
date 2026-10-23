@@ -1,50 +1,22 @@
-// SubagentStart: give every dev-workflow agent the project context of its role (≤ 6,000 characters).
-import { packGuards, resolvePacks } from '../scripts/lib/packs.mjs';
-import { pluginVersion } from '../scripts/lib/paths.mjs';
-import { proceduresFor } from '../scripts/lib/playbook.mjs';
-import { loadProfile } from '../scripts/lib/profile.mjs';
-import { roleOf, runHook } from './hook-lib.mjs';
+// SubagentStart (^dev-workflow:, §9): records the agent of the task that waits for this role in this
+// session (agent id, type, start time, round, session) and gives it its role context. A workflow
+// agent no task waits for gets nothing; so does one that several tasks wait for (logged, not guessed).
+import { recordAgentStart, tasksAwaitingAgent } from '../cli/lib/task.mjs';
+import { agentContext } from './lib/agent-context.mjs';
+import { roleOf } from './lib/context.mjs';
+import { runHook } from './lib/run.mjs';
 
-const LIMIT = 6000;
-
-function describeWhen(when) {
-  const parts = [];
-  if (when.paths.length) parts.push(when.paths.join(', '));
-  if (when.areas.length) parts.push(`areas ${when.areas.join(', ')}`);
-  if (when.keywords.length) parts.push(`keywords ${when.keywords.slice(0, 6).join(', ')}`);
-  if (when.phases.length) parts.push(`phase ${when.phases.join(', ')}`);
-  return parts.join('; ') || 'always';
-}
-
-await runHook('subagent-start', ({ input, ctx }) => {
+await runHook('subagent-start', ({ input, ws, guards, log }) => {
   const role = roleOf(input.agent_type);
-  if (!role) return null;
-  const profile = loadProfile(ctx);
-  const packs = resolvePacks(ctx, profile, { quiet: true });
-  const guards = packGuards(packs);
-  const procedures = proceduresFor(ctx, packs, role);
-  const lines = [
-    `dev-workflow context (profile ${ctx.profilePath}, plugin ${pluginVersion()})`,
-    `Role: ${role}. Task files (brief, spec, reports) live in ${ctx.stateDir}/tasks/<task id>/; your prompt names your brief.`,
-  ];
-  if (role !== 'investigator') {
-    lines.push(`Packages: ${profile.packages.map((pkg) => `${pkg.id} → ${pkg.paths.join(',')} (${pkg.areas.join(', ')}${Object.keys(pkg.checks).length ? `; checks ${Object.keys(pkg.checks).map((name) => name + (pkg.exclusive.includes(name) ? ' [exclusive]' : '')).join(', ')}` : ''})`).join(' · ')}`);
+  if (!role || !input.agent_id) return null;
+  const waiting = tasksAwaitingAgent(ws, { sessionId: input.session_id, role, agentType: input.agent_type });
+  if (waiting.length > 1) {
+    log(`recorded no ${role} ${input.agent_id} (${input.agent_type}): ${waiting.length} tasks wait for one (${waiting.map((task) => task.id).join(', ')})`);
+    return null;
   }
-  const guardParts = [];
-  if (profile.guards.ports.length || guards.ports.length) guardParts.push(`ports ${[...new Set([...profile.guards.ports, ...guards.ports])].join(', ')}`);
-  const commands = [...new Set([...profile.guards.commands, ...guards.commands])];
-  if (commands.length) guardParts.push(`commands ${commands.join(', ')}`);
-  if (guards.dependencyCommands.length) guardParts.push('no dependency installs');
-  if (profile.guards.devServer === 'never') guardParts.push('no dev servers');
-  if (profile.isolation.mode === 'worktree') guardParts.push(`never touch the main checkout ${profile.isolation.protectedCheckout}`);
-  lines.push(`Guards (enforced by a hook): ${guardParts.join('; ') || 'none'}.`);
-  if (profile.domain.neverGuess.length) lines.push(`Never guess on: ${profile.domain.neverGuess.join('; ')}.`);
-  lines.push('Scripts: `cw help` lists every command; pack scripts run with `cw run <pack>:<script>`. Git only as plain `git …` in your working directory or through `cw`.');
-  const header = lines.join('\n');
-  const procedureLines = procedures.map((p) => `- ${p.name} (${p.origin}; when ${describeWhen(p.when)}): ${p.description} — ${p.path}`);
-  let text = `${header}\nProcedures for this role (read one when its trigger applies):\n${procedureLines.join('\n') || '- none'}`;
-  if (text.length > LIMIT) {
-    text = `${header}\nProcedures for this role:\n${procedures.map((p) => `- ${p.name}: ${p.path}`).join('\n')}`;
-  }
-  return { hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: text.slice(0, LIMIT) } };
+  if (!waiting.length) return null;
+  const at = new Date().toISOString();
+  const { task } = recordAgentStart(ws, waiting[0].id, { role, agentId: input.agent_id, agentType: input.agent_type, at, session: input.session_id ?? null });
+  log(`recorded ${role} ${input.agent_id} (${input.agent_type}) for ${task.id} round ${task.round}`);
+  return { hookSpecificOutput: { hookEventName: 'SubagentStart', additionalContext: agentContext({ ws, task, role, guards, cwd: ws.cwd }) } };
 });

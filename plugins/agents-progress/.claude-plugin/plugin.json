@@ -1,11 +1,10 @@
 {
   "name": "agents-progress",
-  "displayName": "Agents Progress",
   "version": "0.1.0",
-  "description": "Agents pane for the dev workflow: every subagent with costume, model, effort, status, context, tokens and time, plus a band above the prompt with each task's phase.",
-  "author": { "name": "Benedikt Volkmer" },
-  "repository": "https://github.com/remklov/claude-tools",
+  "description": "Mod for the dev-workflow plugin: an agents pane with every subagent and its status, and a band above the prompt with each active task's phase.",
+  "author": {
+    "name": "Benedikt Volkmer"
+  },
   "license": "MIT",
-  "keywords": ["mod", "progress", "subagents"],
   "types": "./types/index.d.ts"
 }
