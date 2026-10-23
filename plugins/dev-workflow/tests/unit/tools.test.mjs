@@ -225,12 +225,17 @@ test('repo-lint reports invalid JSON and forbidden agent fields', (t) => {
 test('both tools run and exit 1 when started through a symlinked path', (t) => {
   const link = join(tempDir(t), 'tools');
   symlinkSync(TOOLS, link);
+  // An empty private list: in CI (CI=true) repo-lint fails without one.
+  const env = { ...process.env, FORBIDDEN_TERMS: '' };
+  const withoutList = { ...process.env, CI: 'true', HOME: tempDir(t) };
+  delete withoutList.FORBIDDEN_TERMS;
 
   const broken = repo(t, { 'plugins/one/data.json': '{ broken' });
-  const lintRun = spawnSync(process.execPath, [join(link, 'repo-lint.mjs'), '--root', broken], { encoding: 'utf8' });
+  const lintRun = spawnSync(process.execPath, [join(link, 'repo-lint.mjs'), '--root', broken], { encoding: 'utf8', env });
   assert.equal(lintRun.status, 1, lintRun.stderr);
   assert.match(lintRun.stderr, /data\.json: invalid JSON/);
-  assert.equal(spawnSync(process.execPath, [join(link, 'repo-lint.mjs'), '--root', repo(t)]).status, 0);
+  assert.equal(spawnSync(process.execPath, [join(link, 'repo-lint.mjs'), '--root', repo(t)], { env }).status, 0);
+  assert.equal(spawnSync(process.execPath, [join(link, 'repo-lint.mjs'), '--root', repo(t)], { env: withoutList }).status, 1, 'CI without a private list fails');
   assert.equal(spawnSync(process.execPath, [join(link, 'repo-lint.mjs'), '--root']).status, 2);
 
   const empty = tempDir(t);

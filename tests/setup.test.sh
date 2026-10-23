@@ -6,7 +6,6 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SETUP="$REPO/setup.sh"
-URL=git@github.com:remklov/claude-tools.git
 REPO_SLUG=remklov/claude-tools
 NODE_DIR="$(dirname "$(command -v node)")"
 GIT_DIR_BIN="$(dirname "$(command -v git)")"
