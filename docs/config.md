@@ -142,6 +142,8 @@ An item needs `paths` or `keywords`, and every glob must compile. The highest `m
 
 The conventions are not written in the config: `withDefaults` merges the preset into the effective config as `git.conventions`, and `cw config show` prints only its id there. The `default` preset defines the branch `{ticket}/{type}/{slug}` with the types `feature`, `bugfix`, `hotfix`, the commit keywords and flags, the summary limits (72, ideally 52), the trailer `Relates to {ticket}`, and the PR/MR sections.
 
+The `ticket-suffix` preset keeps the ticket in the summary instead: branch `{ticketLower}-{slug}` (`nv-9-cre-totaliva`), `chore-{slug}` for the no-ticket key, commit summary `<Summary> (<TICKET>)` without keywords, flags or trailers, the PR/MR title = the oldest commit's summary, and the sections "What & why", "Affected packages", "Testing", "Risks & deploy steps", "Open points" and "Screenshots"; its no-ticket key is `NO-TICKET`.
+
 ## tickets
 
 | Field | Type | Default | Meaning |

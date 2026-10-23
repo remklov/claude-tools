@@ -451,6 +451,8 @@ Conventions:
 - Trailer `Relates to {ticket}`, left out for the no-ticket key.
 - PR/MR title follows the summary rules. Sections: "What & why", "Testing" (only what was actually verified), "Risks & deploy steps", "Open points" (unfixed non-blocking findings and the report's open points). Empty sections are left out. Never merge.
 
+**Preset `ticket-suffix`** (`presets/git/ticket-suffix.json`, owner decision 2026-10-23 for fisko): branch `{ticketLower}-{slug}`, `chore-{slug}` without a ticket; summary `{text} ({ticket})` without keywords, flags or trailers; PR/MR title = the oldest commit's summary; sections "What & why", "Affected packages", "Testing", "Risks & deploy steps", "Open points", "Screenshots".
+
 **This repo's own conventions** (write them into its CLAUDE.md):
 - English; the conventions above with `NO-TICKET`.
 - Per-plugin semver in `plugin.json`; CHANGELOG in Keep a Changelog format; after a merge, `claude plugin tag --push` per changed plugin (tags `<plugin>--v<version>`).
