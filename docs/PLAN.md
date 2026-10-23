@@ -116,7 +116,7 @@ Marketplace name: `remklov` · Plugins: `dev-workflow`, `agents-progress`
     - The snapshot (key, summary, description, acceptance criteria, status, assignee, url) is stored with `cw ticket save --task <id>` (stdin JSON) in O3, once the task exists.
   - If `.claude/plans/<KEY>.md` exists (a kickoff plan, written by a planning skill or by hand), it is read as input.
   - If the MCP is missing or not logged in: tell the user (the one-time `/mcp` login) and ask them to paste the ticket text, or continue from the command's notes.
-  - No writes to any ticket system; the ticket's assignee is the team-level claim. In-place mode allows one active task per work tree (`cw task start` enforces it).
+  - No writes to any ticket system; the ticket's assignee is the team-level claim. Within one clone a ticket has at most one active task: `cw task new` checks it under the state lock (all sessions and worktrees share the git common dir); there is no claim across clones or machines. In-place mode allows one active task per work tree (`cw task start` enforces it).
 - **D7 Git hosts.**
   - Adapters `github` (`gh`) and `gitlab` (`glab`), detected from the work repo's `origin`, with a config override.
   - `cw` never pushes and never creates a PR/MR. `cw pr command --task` prints the exact commands, and the orchestrator runs them via Bash after AskUserQuestion confirmation, so the `ask` permissions apply. Flags in Appendix A.

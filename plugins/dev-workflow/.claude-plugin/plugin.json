@@ -1,6 +1,6 @@
 {
   "name": "dev-workflow",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Orchestrated multi-agent development workflow: generalist implementer and reviewer agents, role playbooks, stack rule packs and the deterministic cw CLI. Start a task with /dev-workflow:ticket <TICKET-KEY | NO-TICKET>.",
   "author": { "name": "Benedikt Volkmer" },
   "license": "MIT"
