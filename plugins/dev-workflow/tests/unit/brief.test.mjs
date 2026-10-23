@@ -114,7 +114,9 @@ test('the implementer brief carries the spec, packages, rules, procedures, guard
   const reviewer = renderBrief({ ws: worktree, task, role: 'reviewer', specText: 'spec', reportPath: '/s/report-2.json', previousReviewPath: '/s/review-1.json' });
   assert.ok(reviewer.includes('- Your previous review: /s/review-1.json'));
   assert.ok(!reviewer.includes('Guardrails'));
-  assert.ok(reviewer.includes("- Mode: worktree · the implementer's worktree: run git exactly as `git -C app …` from the project root (log, diff, show, status), with this relative path (the allow rules match only it); never `cd`. Read its files by absolute path."), reviewer);
+  assert.ok(reviewer.includes(`- Mode: worktree · the implementer's worktree: read its history with \`cw review diff|log|status --task ${task.id}\`, never with git; never \`cd\`. Read its files by absolute path.`), reviewer);
+  const inPlaceReviewer = renderBrief({ ws: inPlace, task, role: 'reviewer', specText: 'spec' });
+  assert.ok(inPlaceReviewer.includes(`- Mode: in-place · work tree \`/p/app\`: read its history with \`cw review diff|log|status --task ${task.id}\`; never \`cd\`.`), inPlaceReviewer);
   assert.ok(!reviewer.includes('`/p/app`'), 'the absolute worktree path is no git form');
   assert.ok(reviewer.includes('- Work tree to review, read-only (absolute, for the Read tool): /p/app'), reviewer);
   assert.ok(renderBrief({ ws: worktree, task, role: 'implementer', specText: 'spec' }).includes('no `git -C`'));

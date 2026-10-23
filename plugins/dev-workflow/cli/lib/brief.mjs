@@ -1,8 +1,7 @@
 // Briefs for the implementer and the reviewer (§6 items 1–2), and the exact Agent parameters and
 // SendMessage texts the orchestrator passes on verbatim (O6, O8; D4). Rendering is pure.
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { writeAtomic } from './fsx.mjs';
-import { quote } from './host/index.mjs';
 import { gitForm, taskPath, workTreeOf } from './workspace.mjs';
 
 export const implementerAgentType = (complexity) => `dev-workflow:implementer-${complexity}`;
@@ -93,10 +92,12 @@ export function renderBrief({ ws, task, role, specText, ticket = null, packages 
   const base = task.base ? `\`${task.base.branch}\` @ \`${task.base.commit}\`` : 'recorded at task start';
   const gitLine =
     ws.mode === 'in-place'
-      ? `- Mode: in-place · work tree \`${tree}\`: run git as \`${gitForm(ws)} …\`, exactly in this form, from the project root (the Bash cwd stays there; never \`cd\`); use absolute paths for files.`
+      ? role === 'reviewer'
+        ? `- Mode: in-place · work tree \`${tree}\`: read its history with \`cw review diff|log|status --task ${task.id}\`; never \`cd\`. Read its files by absolute path.`
+        : `- Mode: in-place · work tree \`${tree}\`: run git as \`${gitForm(ws)} …\`, exactly in this form, from the project root (the Bash cwd stays there; never \`cd\`); use absolute paths for files.`
       : role === 'reviewer'
         // The reviewer runs without isolation, in the project root: it reads the implementer's worktree from there.
-        ? `- Mode: worktree · the implementer's worktree: run git exactly as \`git -C ${tree ? quote(relative(ws.configRoot ?? ws.workRepo, tree) || '.') : '<that worktree>'} …\` from the project root (log, diff, show, status), with this relative path (the allow rules match only it); never \`cd\`. Read its files by absolute path.`
+        ? `- Mode: worktree · the implementer's worktree: read its history with \`cw review diff|log|status --task ${task.id}\`, never with git; never \`cd\`. Read its files by absolute path.`
         : '- Mode: worktree · work only in your worktree with plain `git …`; no `git -C` and no command substitution around git.';
   const lines = [
     `# Brief: ${role} · ${task.ticket} · ${task.title}`,

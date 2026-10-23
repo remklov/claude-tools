@@ -1,18 +1,9 @@
 // The role context SubagentStart gives a workflow agent (§9): ≤ 6,000 characters with the task, the
 // work tree and its mode, the git form to use, the packages with their checks, a guards summary and
 // where the brief is. The brief itself stays the source of truth; this is the orientation.
-import { relative } from 'node:path';
-import { quote } from '../../cli/lib/host/index.mjs';
 import { gitCwdNote, gitForm } from '../../cli/lib/workspace.mjs';
 
 export const CONTEXT_MAX = 6000;
-
-// The git prefix for the reviewer of a worktree task, which reads the implementer's worktree from its
-// own cwd: plain git inside it, else git -C with the relative path.
-export function treeGitForm(cwd, tree) {
-  const rel = relative(cwd, tree);
-  return rel === '' ? 'git' : `git -C ${quote(rel)}`;
-}
 
 function workLines({ ws, task, role, cwd }) {
   if (ws.mode === 'in-place') {
@@ -20,7 +11,9 @@ function workLines({ ws, task, role, cwd }) {
     const note = gitCwdNote(ws, cwd);
     return [
       `Mode: in-place · work tree ${ws.workRepo} (the application repo inside the project ${ws.configRoot}).`,
-      `Git: \`${gitForm(ws)} …\` exactly in this form, from the project root (your Bash cwd stays there; never cd); use absolute paths for files.${role === 'reviewer' ? ' Read-only: log, diff, show, status.' : ''}`,
+      role === 'reviewer'
+        ? `History: \`cw review diff|log|status --task ${task.id}\` (read-only, any cwd); never cd; use absolute paths for files.`
+        : `Git: \`${gitForm(ws)} …\` exactly in this form, from the project root (your Bash cwd stays there; never cd); use absolute paths for files.`,
       ...(note ? [`Note: ${note}`] : []),
     ];
   }
@@ -33,7 +26,7 @@ function workLines({ ws, task, role, cwd }) {
   const tree = task.workTree;
   return [
     `Mode: worktree · work tree to review, read-only: ${tree ?? "the implementer's worktree (cw review scope names it)"}.`,
-    `Git: ${tree ? `\`${treeGitForm(cwd, tree)} …\`` : '`git -C <that worktree> …`'} for log, diff, show and status; never cd.`,
+    `History: \`cw review diff|log|status --task ${task.id}\` (read-only, any cwd), never git in that worktree; never cd.`,
   ];
 }
 

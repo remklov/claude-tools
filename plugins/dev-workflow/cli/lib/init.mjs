@@ -483,12 +483,11 @@ const READ_GIT = ['status *', 'diff *', 'log *', 'show *', 'ls-files *', 'rev-pa
 // because Bash(git add *) does not match git -C … (code.claude.com/docs/en/permissions). In-place:
 // add, commit and the read-only commands in the app root. A rule matches the command text as written,
 // so it names the appRoot exactly as cw prints it: every appRoot that quote() leaves unquoted gets the
-// rules; one that needs shell quoting gets none, only a warning. Worktree mode: the reviewer's
-// read-only commands in the implementer's worktree, which Claude Code creates under .claude/worktrees/.
+// rules; one that needs shell quoting gets none, only a warning. Worktree mode gets none: the worktree
+// name is random, and a * in front of the subcommand would also approve options such as -c or
+// --exec-path; the reviewer reads the worktree with cw review diff|log|show|status (ADR 0011).
 export function gitAllowRules(config) {
-  if ((config.workspace?.mode ?? 'worktree') !== 'in-place') {
-    return { rules: READ_GIT.map((command) => `Bash(git -C .claude/worktrees/* ${command})`), warning: null };
-  }
+  if ((config.workspace?.mode ?? 'worktree') !== 'in-place') return { rules: [], warning: null };
   const appRoot = normalizePackagePath(config.workspace.appRoot);
   if (quote(appRoot) !== appRoot) {
     return {

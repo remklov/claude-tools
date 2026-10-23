@@ -743,7 +743,7 @@ node ~/Projects/claude-dev-workflow/plugins/dev-workflow/cli/cw.mjs checks
 grep -n -A6 '"worktree"' .claude/settings.json
 ```
 
-**Expected:** `cw checks` passes; `.claude/settings.json` has `worktree.baseRef: "head"` and `symlinkDirectories` with `node_modules`, `packages/api/node_modules` and `packages/web/node_modules`, no `git -C app` allow rules (worktree mode has no app root), and the reviewer's read-only `Bash(git -C .claude/worktrees/* status|diff|log|show … *)` rules.
+**Expected:** `cw checks` passes; `.claude/settings.json` has `worktree.baseRef: "head"` and `symlinkDirectories` with `node_modules`, `packages/api/node_modules` and `packages/web/node_modules`, no `git -C` allow rules at all (worktree mode has no app root, and the reviewer reads the worktree with `cw review diff|log|status`, ADR 0011).
 
 - [ ] Record: prepared: yes / no: ____
 
@@ -825,7 +825,7 @@ git -C ~/dry-run/cli-worktree checkout -- packages/web/src/App.tsx
 - G-ORCH-EDIT refuses Edit and Write during the task, with the deny reason in the transcript, and allows them after `cw task end`.
 - O9: `cw pr command` prints a push of the task branch from the task's worktree and `gh pr create --repo github.com/acme/dry-run -B main -H NO-TICKET/feature/<slug> -t '<title>' -F <…/pr-body.md>`.
 - Every Edit and Write of the implementer in its worktree asks, with the extra option to allow edits in `.claude` for the session: Claude Code puts the worktree under `.claude/worktrees/`, a protected path (observed in the P3 dry run, CLI 2.1.308). Answer each with Yes and record the count.
-- The reviewer runs git as `git -C .claude/worktrees/agent-<id> …` (relative, as its brief prints it), without a prompt.
+- The reviewer reads the history with `cw review diff|log|status --task <id>`, without a prompt, and runs no git itself.
 - Under the sandbox, `cw task cleanup` may stop with exit 3: git deleted the worktree directory but may not delete its record in `.git/worktrees`. The fix it prints (run it again outside the sandbox, or `git worktree prune`) finishes the cleanup; record which one the orchestrator used.
 - O10: `cw task cleanup` removes the clean worktree and deletes `worktree-agent-<id>`. Step 4 shows one worktree (the main checkout, on `main`), no `worktree-agent-*` branch, and the task branch in the bare origin.
 

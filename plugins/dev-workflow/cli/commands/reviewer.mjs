@@ -2,7 +2,8 @@
 // task.json, whatever the cwd (D5), and never write to it; the reviewer re-runs checks and proofs with
 // cw checks --changed and cw prove --recheck.
 import { fence } from '../lib/report.mjs';
-import { reviewScope, saveReview } from '../lib/review.mjs';
+import { reviewRead, reviewScope, saveReview } from '../lib/review.mjs';
+import { usageError } from '../lib/out.mjs';
 import { emit, loadTaskContext, readStdinJson } from './common.mjs';
 
 const short = (sha) => String(sha ?? '').slice(0, 10);
@@ -33,7 +34,38 @@ function printScope(ctx, value) {
   }
 }
 
+// cw review diff|log|status: read-only git in the task's work tree, printed as git prints it.
+function readCommand(view, { usage, summary, flags = {} }) {
+  return {
+    path: ['review', view],
+    group: 'reviewer',
+    usage,
+    summary,
+    flags: { task: 'string', ...flags },
+    run(ctx) {
+      const { ws, task } = loadTaskContext(ctx);
+      if (view === 'status' && ctx.rest.length) throw usageError('cw review status takes no paths', 'Run cw review status --task <id>.');
+      const { workTree, text } = reviewRead({ ws, task, view, rev: ctx.flags.rev ?? null, paths: ctx.rest, stat: Boolean(ctx.flags.stat), patch: Boolean(ctx.flags.patch) });
+      emit(ctx, { task: task.id, workTree, view, text }, (value) => ctx.out.print(value.text.replace(/\n$/, '')));
+    },
+  };
+}
+
 export const commands = [
+  readCommand('diff', {
+    usage: 'cw review diff --task <id> [--stat] [-- <path>…]',
+    summary: 'The task branch against its base (git diff <base>...<branch>), optionally for some paths',
+    flags: { stat: 'boolean' },
+  }),
+  readCommand('log', {
+    usage: 'cw review log --task <id> [--stat] [--patch] [--rev <commit>[:<path>]] [-- <path>…]',
+    summary: "The task's commits (git log <base>..<branch>); with --rev one commit or one file at a commit (git show)",
+    flags: { stat: 'boolean', patch: 'boolean', rev: 'string' },
+  }),
+  readCommand('status', {
+    usage: 'cw review status --task <id>',
+    summary: "Uncommitted changes in the task's work tree (git status --short)",
+  }),
   {
     path: ['review', 'scope'],
     group: 'reviewer',

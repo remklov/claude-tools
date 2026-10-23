@@ -132,7 +132,7 @@ All state lives in the config root's git common dir, `<git common dir>/dev-workf
 | Layout | outer project repo with the config; the application is a nested repo at `workspace.appRoot` (e.g. `app/`) | the application is the project repo |
 | A task's work tree | `appRoot` | the implementer's agent worktree `.claude/worktrees/agent-<id>`, which Claude Code creates for the Agent call with `isolation: "worktree"` |
 | Task branch | `cw ws setup` creates it at HEAD of a clean `appRoot` on the base branch, with `--no-track` | `cw ws setup` runs `git switch -c <branch> <base commit>` in the worktree; a rename would rewrite `.git/config`, which the sandbox refuses (§8) |
-| Git form `cw` prints | `git -C <appRoot> …`, relative to the project root, where the Bash cwd stays | plain `git` in the worktree; the reviewer, without isolation, `git -C .claude/worktrees/<agent> …` |
+| Git form `cw` prints | `git -C <appRoot> …`, relative to the project root, where the Bash cwd stays | plain `git` in the worktree; the reviewer reads it with `cw review diff\|log\|status` (ADR 0011) |
 | Parallel tasks | one started task per work tree (`cw task start` refuses a second) | one worktree per task |
 | `cw task cleanup` | switches `appRoot` back to the base, only from this task's branch | removes the clean worktree and deletes `worktree-agent-<id>` unless it holds commits on no other ref |
 

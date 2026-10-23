@@ -1,6 +1,6 @@
 # 0005 `cw init` allows the read-only `git -C` commands
 
-- Status: accepted, 2026-10-21 (automated dry run of P3)
+- Status: accepted, 2026-10-21 (automated dry run of P3); the worktree-mode rules are superseded by [0011](0011-reviewer-history-through-cw.md)
 
 ## Context
 

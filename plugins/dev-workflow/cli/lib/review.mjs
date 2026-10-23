@@ -9,7 +9,7 @@ import { packagesOf } from './config.mjs';
 import { foreignCommits } from './commit.mjs';
 import { readText, writeJson } from './fsx.mjs';
 import { currentBranch, git, gitResult, isNodeModulesPath, statusEntries } from './git.mjs';
-import { failedError, preconditionError } from './out.mjs';
+import { failedError, preconditionError, usageError } from './out.mjs';
 import { resolvePacks, runPackScript, scopeScripts } from './packs.mjs';
 import { proofsAtHead, readProofs } from './prove.mjs';
 import { collectState, validateReviewInput } from './report.mjs';
@@ -60,6 +60,42 @@ function requireReviewable(ws, task, command) {
     throw preconditionError(`Task ${task.id} has no work tree${workTree ? `: ${workTree} does not exist` : ' yet'}.`, `${TELL_FIX}: there is no work tree to review.`);
   }
   return workTree;
+}
+
+// The reviewer's read-only git (cw review diff|log|status; log --rev shows one commit or file): fixed git arguments in the task's work
+// tree, so no allow rule needs a wildcard in front of the subcommand (where git -c or --exec-path could
+// sit). A revision is a name, never an option; paths go after --, where git reads no options.
+const REVISION = /^(?!-)[A-Za-z0-9._/~^@{}-]+$/;
+const READ_ONLY = ['--no-pager', '-c', 'core.quotePath=false'];
+
+export function reviewRead({ ws, task, view, rev = null, paths = [], stat = false, patch = false }) {
+  const workTree = requireReviewable(ws, task, `review ${view}`);
+  const branch = `refs/heads/${task.branch}`;
+  const base = task.base.commit;
+  const spec = paths.length ? ['--', ...paths] : [];
+  const args = {
+    diff: () => ['diff', '--no-ext-diff', '--no-textconv', '--no-color', ...(stat ? ['--stat'] : []), `${base}...${branch}`, ...spec],
+    log: () => (rev === null
+      ? ['log', '--no-ext-diff', '--no-textconv', '--no-color', '--format=fuller', ...(stat ? ['--stat'] : []), ...(patch ? ['--patch'] : []), `${base}..${branch}`, ...spec]
+      : showArgs()),
+    status: () => ['status', '--short', '--branch', '--untracked-files=all'],
+  };
+  function showArgs() {
+    const [name, path] = splitRevision(rev);
+    if (!REVISION.test(name)) throw usageError(`--rev ${rev} is not a revision`, 'Pass a commit, for example --rev 1a2b3c4, or a file at a commit: --rev 1a2b3c4:src/app.ts.');
+    if (path !== null) return ['show', '--no-color', `${name}:${path}`];
+    return ['show', '--no-ext-diff', '--no-textconv', '--no-color', '--format=fuller', ...(stat ? ['--stat'] : []), name, ...spec];
+  }
+  const result = gitResult([...READ_ONLY, ...args[view]()], { cwd: workTree });
+  if (result.code !== 0) throw failedError(`git ${view} failed in ${workTree}: ${(result.stderr || result.stdout).trim()}`, 'Check the revision and paths; cw review scope lists the changed files.');
+  return { workTree, text: result.stdout };
+}
+
+// "abc:src/x.ts" -> ['abc', 'src/x.ts']; a plain revision has no path.
+function splitRevision(rev) {
+  const value = String(rev ?? '');
+  const colon = value.indexOf(':');
+  return colon === -1 ? [value, null] : [value.slice(0, colon), value.slice(colon + 1)];
 }
 
 // git diff --numstat of the task branch against the base, without rename detection (a rename is a

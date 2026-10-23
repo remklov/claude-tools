@@ -212,7 +212,7 @@ An in-place project with an API and a web package:
 
 - `.claude/dev-workflow/config.json` (an equal config keeps its bytes),
 - `.claude/rules/dev-workflow/*.md` and `.claude/dev-workflow/rulebook.lock.json`,
-- `.claude/settings.json`, merged additively: the packs' permissions, allow rules for the `git -C` forms the agents run (`git -C <appRoot> …` in in-place mode, read-only `git -C .claude/worktrees/* …` in worktree mode), an allow rule per plain check command, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, and in worktree mode `worktree.baseRef` and `worktree.symlinkDirectories`. A differing existing value is kept and reported; `settings.local.json` is never read or written,
+- `.claude/settings.json`, merged additively: the packs' permissions, allow rules for the `git -C` forms the agents run (`git -C <appRoot> …` in in-place mode; none in worktree mode, where the reviewer reads the worktree with `cw review diff|log|status`, ADR 0011), an allow rule per plain check command, `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`, and in worktree mode `worktree.baseRef` and `worktree.symlinkDirectories`. A differing existing value is kept and reported; `settings.local.json` is never read or written,
 - a marked section in `CLAUDE.md` and `scripts/setup-dev-workflow.sh`.
 
 ## Validate and inspect

@@ -4,6 +4,17 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.5.0 - 2026-10-23
+
+### Added
+
+- `cw review diff`, `cw review log` (with `--rev <commit>[:<path>]`) and `cw review status`: the reviewer's read-only history of the task's work tree, in both workspace modes, without a permission prompt (ADR 0011).
+
+### Changed
+
+- **Security:** `cw init` no longer writes `Bash(git -C .claude/worktrees/* …)` allow rules in worktree mode: the `*` in front of the subcommand also approved git options such as `-c` or `--exec-path`. Remove existing ones from `.claude/settings.json` by hand.
+- The reviewer's brief, role context and playbook name the `cw review` commands instead of a git form.
+
 ## dev-workflow 0.4.1 - 2026-10-23
 
 ### Fixed
