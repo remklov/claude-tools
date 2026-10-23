@@ -14,5 +14,6 @@ The architecture decisions D1 to D12 of the first build are in `docs/PLAN.md` §
 | [0008](0008-commit-lint.md) | `cw git lint` is `cw commit lint` |
 | [0009](0009-ticket-sources.md) | Tickets come from Jira, Linear or local files (`tickets.source`, `tickets.contextPath`) |
 | [0010](0010-remklov-marketplace.md) | The remklov marketplace: local tickets by default, Jira through Atlassian's plugin, preset `default`, GitHub |
+| [0011](0011-reviewer-history-through-cw.md) | The reviewer reads history with `cw review diff\|log\|status`; no `git -C .claude/worktrees/*` allow rules |
 
 A new record takes the next number, the format of the existing ones and a line in this table.

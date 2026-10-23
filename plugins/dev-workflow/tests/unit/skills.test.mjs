@@ -313,6 +313,8 @@ const PLACEHOLDERS = {
   '<file>,<file>': 'src/sum.mjs',
   '<package>:<file>::<test name>': 'app:src/sum.test.mjs::adds',
   '<pack>:<script>': 'vitest:no-focus',
+  '<commit>': 'HEAD',
+  '<commit>:<file>': 'HEAD:src/sum.mjs',
 };
 const PLACEHOLDER = /<[^<>\s]+>/;
 

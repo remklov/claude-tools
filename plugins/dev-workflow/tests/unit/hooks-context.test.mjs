@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import { quote } from '../../cli/lib/host/index.mjs';
 import { loadWorkspace } from '../../cli/lib/workspace.mjs';
-import { CONTEXT_MAX, agentContext, treeGitForm } from '../../hooks/lib/agent-context.mjs';
+import { CONTEXT_MAX, agentContext } from '../../hooks/lib/agent-context.mjs';
 import { CACHE_FILE, canonical, loadHookWorkspace, locateProject, roleOf } from '../../hooks/lib/context.mjs';
 import { addAgentWorktree, inPlaceConfig, makeInPlace, makeWorktreeRepo, tempBase, write } from '../fixtures/repo.mjs';
 
@@ -70,13 +70,6 @@ test('a broken config throws, so the hook fails open and logs it', (t) => {
   assert.throws(() => loadHookWorkspace(place), /config .* is invalid/);
 });
 
-test('a worktree reviewer reads the implementer worktree with git -C relative to its own cwd', () => {
-  assert.equal(treeGitForm('/p', '/p/.claude/worktrees/agent-1'), 'git -C .claude/worktrees/agent-1');
-  assert.equal(treeGitForm('/p/.claude/worktrees/agent-1', '/p/.claude/worktrees/agent-1'), 'git');
-  assert.equal(treeGitForm('/p/x', '/p/.claude/worktrees/agent-1'), 'git -C ../.claude/worktrees/agent-1');
-  assert.equal(treeGitForm('/p', '/p/my tree'), "git -C 'my tree'");
-});
-
 test('the agent context names the task, the mode, the git form, the packages and the guards', (t) => {
   const fx = makeInPlace(t, { config: inPlaceConfig({ packs: ['node-npm'], guards: { ports: [5173], commands: ['docker compose'], devServer: 'never' } }) });
   const { ws, guards } = hookWs(fx.root);
@@ -98,7 +91,8 @@ test('the agent context names the task, the mode, the git form, the packages and
   const reviewer = agentContext({ ws, task: task({ reviewRound: 1 }), role: 'reviewer', guards, cwd: ws.cwd });
   assert.match(reviewer, /review round 1\/3/);
   assert.match(reviewer, /Your preloaded playbook \(dev-workflow:reviewer-playbook\) is the procedure/);
-  assert.match(reviewer, /\nGit: `git -C app …` exactly in this form/);
+  assert.match(reviewer, /\nHistory: `cw review diff\|log\|status --task \S+` \(read-only, any cwd\)/);
+  assert.doesNotMatch(reviewer, /\nGit: /);
   assert.match(reviewer, /read-only: no git write commands/);
   assert.match(reviewer, /cw review save --task/);
 
@@ -116,7 +110,8 @@ test('worktree mode: plain git in the implementer worktree; the reviewer reads t
   assert.ok(implementer.includes(`your own worktree ${canonical(tree)}`));
   assert.match(implementer, /plain `git …` in your worktree; no `git -C`/);
   const reviewer = agentContext({ ws, task: task({ workTree: canonical(tree) }), role: 'reviewer', guards, cwd: canonical(fx.root) });
-  assert.match(reviewer, /`git -C \.claude\/worktrees\/agent-abc123 …` for log, diff, show and status/);
+  assert.ok(reviewer.includes(`work tree to review, read-only: ${canonical(tree)}`), reviewer);
+  assert.match(reviewer, /\nHistory: `cw review diff\|log\|status --task \S+` \(read-only, any cwd\), never git in that worktree/);
   assert.match(agentContext({ ws, task: task(), role: 'reviewer', guards, cwd: canonical(fx.root) }), /cw review scope names it/);
 });
 

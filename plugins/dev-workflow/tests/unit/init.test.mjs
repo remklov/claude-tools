@@ -394,11 +394,11 @@ const PERMISSIONS_12 = {
 };
 
 // The git -C allow rules (§12, owner decisions 2026-10-20 and 2026-10-21): in-place from
-// workspace.appRoot, in worktree mode for the implementer's worktree under .claude/worktrees/.
+// workspace.appRoot; none in worktree mode (a * before the subcommand would approve git options, ADR 0011).
 const READ_GIT = ['status *', 'diff *', 'log *', 'show *', 'ls-files *', 'rev-parse *', 'branch --show-current'];
 const appGitRules = (appRoot) => ['add *', 'commit *', ...READ_GIT].map((command) => `Bash(git -C ${appRoot} ${command})`);
 const APP_GIT_RULES = appGitRules('app');
-const WORKTREE_GIT_RULES = READ_GIT.map((command) => `Bash(git -C .claude/worktrees/* ${command})`);
+const WORKTREE_GIT_RULES = [];
 
 test('settingsFragment: the packs\' §12 permissions, plain checks only, worktree settings only in worktree mode', () => {
   const checks = { test: 'npm test', bad: 'npm test && rm -rf x', typecheck: 'npm run typecheck' };
@@ -415,7 +415,7 @@ test('settingsFragment: the packs\' §12 permissions, plain checks only, worktre
   const worktree = settingsFragment({ config: { ...config, workspace: { mode: 'worktree' } }, detection: { symlinkDirectories: ['node_modules', 'web/node_modules'] } });
   assert.deepEqual(worktree.worktree, { baseRef: 'head', symlinkDirectories: ['node_modules', 'web/node_modules'] });
   assert.equal(inPlace.worktree, undefined);
-  assert.deepEqual(worktree.permissions.allow.filter((rule) => rule.startsWith('Bash(git -C')), WORKTREE_GIT_RULES, 'worktree mode: only the reviewer\'s read-only git -C in the worktree');
+  assert.deepEqual(worktree.permissions.allow.filter((rule) => rule.startsWith('Bash(git -C')), WORKTREE_GIT_RULES, 'worktree mode: no git -C rule; the reviewer uses cw review');
 
   const spaced = settingsFragment({ config: { ...config, workspace: { mode: 'in-place', appRoot: 'my app' } }, detection: null });
   assert.ok(!spaced.permissions.allow.some((rule) => rule.startsWith('Bash(git -C')), 'no rule for an appRoot that needs quoting');

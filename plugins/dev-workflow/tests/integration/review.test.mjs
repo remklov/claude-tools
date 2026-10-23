@@ -293,3 +293,26 @@ test('review scope lists the blocking problems and still exits 0; missing precon
   assert.equal(noBranch.code, 3);
   assert.match(noBranch.stderr, /The task branch NO-TICKET\/feature\/sum-three does not exist in /);
 });
+
+for (const layout of ['in-place', 'worktree']) {
+  test(`${layout}: cw review diff, log and status read the task's work tree from the project root, options are refused`, (t) => {
+    const s = reviewedTask(t, layout);
+    const read = (args) => s.run(s.fx.root, ['review', ...args]);
+    const diff = read(['diff']);
+    assert.equal(diff.code, 0, diff.stderr);
+    assert.match(diff.stdout, /^diff --git a\/src\/sum\.mjs b\/src\/sum\.mjs[^]*\+export const sum3/m);
+    assert.match(read(['diff', '--stat']).stdout, /src\/sum3\.test\.mjs \| +\d+ \+/);
+    assert.doesNotMatch(read(['diff', '--', 'src/sum.mjs']).stdout, /sum3\.test/);
+    const log = read(['log']);
+    assert.match(log.stdout, /^commit [0-9a-f]{40}\n[^]*\[FEATURE\] Add sum3/m);
+    const head = s.git('rev-parse', 'HEAD');
+    assert.match(read(['log', '--rev', head.slice(0, 10), '--stat']).stdout, /\[FEATURE\] Add sum3[^]*src\/sum\.mjs/);
+    assert.match(read(['log', '--rev', `${head}:src/sum.mjs`]).stdout, /^export const sum3/m);
+    assert.match(read(['status']).stdout, /^## /);
+    for (const rev of ['--output=/tmp/x', '-c core.pager=evil', '$(id)']) {
+      const refused = read(['log', '--rev', rev]);
+      assert.notEqual(refused.code, 0, rev);
+    }
+    assert.equal(read(['status', '--', 'src']).code, 2, 'status takes no paths');
+  });
+}
