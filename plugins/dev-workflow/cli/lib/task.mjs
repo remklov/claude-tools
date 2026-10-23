@@ -148,8 +148,21 @@ export function rebuildState(ws, { now } = {}) {
   writeJson(join(ws.stateDir, 'state.json'), { version: 1, updatedAt: iso(now), configRoot: ws.configRoot, mode: ws.mode, tasks: entries });
 }
 
-export function createTask(ws, task, { now } = {}) {
+// One active task per ticket in this clone: every session and worktree shares the git common dir.
+export function assertTicketFree(ws, ticket) {
+  const active = listTasks(ws, { ticket });
+  if (!active.length) return;
+  throw preconditionError(
+    `Ticket ${ticket} has an active task: ${active.map((task) => `${task.id} (${task.phase})`).join(', ')}.`,
+    `To continue it in this session: cw task new --rebind ${active[0].id}. To drop it: cw task end --task ${active[0].id} --outcome aborted.`,
+  );
+}
+
+// exclusiveTicket repeats assertTicketFree under the lock, so two sessions starting the same ticket at
+// the same moment cannot both pass the check.
+export function createTask(ws, task, { now, exclusiveTicket = false } = {}) {
   return withLock(lockPath(ws), () => {
+    if (exclusiveTicket) assertTicketFree(ws, task.ticket);
     if (existsSync(taskDir(ws, task.id))) {
       throw preconditionError(`Task ${task.id} exists already (also ended tasks keep their id).`, 'Choose another --slug.');
     }

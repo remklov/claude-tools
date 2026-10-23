@@ -4,6 +4,12 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.4.1 - 2026-10-23
+
+### Fixed
+
+- `cw task new` checks for an active task of the same ticket again under the state lock, so two sessions of one clone that start the same ticket at the same moment cannot both get a task.
+
 ## dev-workflow 0.4.0 - 2026-10-23
 
 ### Added

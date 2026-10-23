@@ -5,7 +5,7 @@ import { writeAtomic } from '../lib/fsx.mjs';
 import { branchExists, currentBranch } from '../lib/git.mjs';
 import { preconditionError, usageError } from '../lib/out.mjs';
 import { specTemplate } from '../lib/spec.mjs';
-import { OUTCOMES, createTask, endTask, isActive, listTasks, newTask, readTask, staleAgent, transition, updateTask } from '../lib/task.mjs';
+import { OUTCOMES, assertTicketFree, createTask, endTask, isActive, listTasks, newTask, readTask, staleAgent, transition, updateTask } from '../lib/task.mjs';
 import { renderBranch } from '../lib/template.mjs';
 import { isNoTicket, normalizeTicketKey } from '../lib/ticket.mjs';
 import { taskPath, workTreeOf } from '../lib/workspace.mjs';
@@ -61,15 +61,9 @@ function create(ctx) {
   const slug = requireFlag(ctx.flags, 'slug', 'Pass --slug <2–4 lowercase words joined by hyphens>.');
   const title = requireFlag(ctx.flags, 'title', 'Pass --title "<short task title>".');
   const type = requireFlag(ctx.flags, 'type', 'Pass --type feature|bugfix|hotfix.');
-  if (!isNoTicket(ws.config, ticket)) {
-    const active = listTasks(ws, { ticket });
-    if (active.length) {
-      throw preconditionError(
-        `Ticket ${ticket} has an active task: ${active.map((task) => `${task.id} (${task.phase})`).join(', ')}.`,
-        `To continue it in this session: cw task new --rebind ${active[0].id}. To drop it: cw task end --task ${active[0].id} --outcome aborted.`,
-      );
-    }
-  }
+  const exclusiveTicket = !isNoTicket(ws.config, ticket);
+  // Checked early for a clear refusal before the branch warning, and again by createTask under the lock.
+  if (exclusiveTicket) assertTicketFree(ws, ticket);
   const branch = renderBranch(ws.config.git.conventions, { ticket, type, slug, noTicket: isNoTicket(ws.config, ticket) });
   const repo = ws.mode === 'in-place' ? ws.workRepo : mainCheckout(ws);
   if (existsSync(repo) && branchExists(repo, branch)) {
@@ -77,7 +71,7 @@ function create(ctx) {
   }
   const ownerSession = ctx.env.CLAUDE_CODE_SESSION_ID || null;
   if (!ownerSession) ctx.out.warn('CLAUDE_CODE_SESSION_ID is not set: the edit guard cannot bind this task to a session.');
-  const task = createTask(ws, newTask(ws, { ticket, title, type, slug, branch, ownerSession }));
+  const task = createTask(ws, newTask(ws, { ticket, title, type, slug, branch, ownerSession }), { exclusiveTicket });
   const spec = taskPath(ws, task.id, 'spec.md');
   writeAtomic(spec, specTemplate(task));
   return {

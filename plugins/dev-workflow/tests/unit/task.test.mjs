@@ -199,3 +199,23 @@ test('SubagentStart records the agent from the hook input; with the owner sessio
   assert.equal(readTask(ws, task.id).agents.reviewer.session, null);
   assert.equal(staleAgent(readTask(ws, task.id), 'reviewer'), true);
 });
+
+test('a ticket has one active task: createTask checks it under the lock, also for simultaneous starts', async (t) => {
+  const { ws } = setup(t);
+  const first = createTask(ws, newTask(ws, fields('first-try')), { exclusiveTicket: true });
+  assert.throws(() => createTask(ws, newTask(ws, fields('second-try')), { exclusiveTicket: true }),
+    (error) => error.exitCode === 3 && new RegExp(`APP-42 has an active task: ${first.id}`).test(error.message) && /--rebind/.test(error.fix));
+  updateTask(ws, first.id, (task) => endTask(task, 'aborted'));
+  createTask(ws, newTask(ws, fields('third-try')), { exclusiveTicket: true });
+
+  const { fx: race } = setup(t);
+  const args = (slug) => ['task', 'new', '--ticket', 'APP-7', '--slug', slug, '--title', 'Race it', '--type', 'feature'];
+  const cwScript = join(pluginRoot, 'cli', 'cw.mjs');
+  const script = (slug) => `import { spawnSync } from 'node:child_process';
+const result = spawnSync(process.execPath, ['${cwScript}', ...${JSON.stringify(args(slug))}], { cwd: '${race.root}', encoding: 'utf8' });
+process.stderr.write(result.stderr);
+process.exit(result.status);`;
+  const children = await runTogether(['race-one', 'race-two', 'race-three'].map(script), race.env);
+  assert.deepEqual(children.map((child) => child.status).sort(), [0, 3, 3], children.map((child) => child.stderr).join('\n'));
+  assert.equal(listTasks(loadWorkspace({ cwd: race.root }), { ticket: 'APP-7' }).length, 1);
+});
