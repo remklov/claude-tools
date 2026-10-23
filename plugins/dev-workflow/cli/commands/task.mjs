@@ -70,7 +70,7 @@ function create(ctx) {
       );
     }
   }
-  const branch = renderBranch(ws.config.git.conventions, { ticket, type, slug });
+  const branch = renderBranch(ws.config.git.conventions, { ticket, type, slug, noTicket: isNoTicket(ws.config, ticket) });
   const repo = ws.mode === 'in-place' ? ws.workRepo : mainCheckout(ws);
   if (existsSync(repo) && branchExists(repo, branch)) {
     ctx.out.warn(`${branch} exists already in ${repo}; cw did not create it. Ask the user whose it is before the task starts.`);

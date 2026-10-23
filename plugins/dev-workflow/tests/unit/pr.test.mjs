@@ -122,3 +122,18 @@ test('prBody leaves empty sections out and has no trailer for the no-ticket key'
   assert.equal(prBody({ task: task('maintenance'), config: maintenance }), '## What & why\n\nAdd the mul helper\n');
   assert.ok(prBody({ task: task('NO-TICKET'), config: maintenance }).endsWith('\n\nAdd the mul helper\n'), 'NO-TICKET is an alias of the no-ticket key');
 });
+
+test('the ticket-suffix preset: the title is the oldest summary; Affected packages; no trailer', () => {
+  const suffixConfig = withDefaults({
+    version: 1,
+    project: { name: 'Fixture' },
+    packs: [],
+    packages: [{ id: 'api', path: 'fisko-api', areas: ['backend'] }, { id: 'app', path: 'fisko-app', areas: ['frontend'] }],
+    git: { preset: 'ticket-suffix' },
+  });
+  const suffix = suffixConfig.git.conventions;
+  assert.equal(prTitle({ preset: suffix, commits: [commit('Fix the CRE (NV-9)'), commit('Add a test (NV-9)', 'b'.repeat(40))], taskId: 't' }), 'Fix the CRE (NV-9)');
+  const body = prBody({ task: { ...task('NV-9'), packages: ['api'] }, config: suffixConfig, spec: SPEC });
+  assert.match(body, /^## What & why\n\nAdd the mul helper[^]*## Affected packages\n\n- api \(`fisko-api`\)\n$/);
+  assert.doesNotMatch(body, /Relates to/);
+});

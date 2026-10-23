@@ -154,3 +154,12 @@ test('ticket context names the source and the ticket or context file of a key, f
   assert.match(missing.stderr, /docs\/specs\/APP-124\.md of APP-124 does not exist/);
   assert.equal(cw(fx.root, ['ticket', 'context'], { env: fx.env }).code, 2);
 });
+
+test('task new names the branch after the ticket-suffix preset, with and without a ticket', (t) => {
+  const fx = makeInPlace(t, { config: inPlaceConfig({ git: { preset: 'ticket-suffix', noTicketKey: 'NO-TICKET' } }) });
+  const created = (ticket, slug) => cw(fx.root, ['task', 'new', '--ticket', ticket, '--slug', slug, '--title', 'A task', '--type', 'bugfix', '--json'], { env: fx.env });
+  const withTicket = created('NV-9', 'cre-totaliva');
+  assert.equal(withTicket.code, 0, withTicket.stderr);
+  assert.equal(withTicket.json().branch, 'nv-9-cre-totaliva');
+  assert.equal(created('NO-TICKET', 'tidy-readme').json().branch, 'chore-tidy-readme');
+});

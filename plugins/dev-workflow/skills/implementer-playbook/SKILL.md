@@ -45,7 +45,7 @@ Change only what the spec needs (CORE-SCOPE); no drive-by refactors, renames or 
 ### 6. Commit
 
 1. Stage your changed files by path with the git form of `cw context`.
-2. `cw commit msg --task <id> --summary "<Imperative summary>" --keyword FEATURE` writes the message file of the git preset into the task state and prints the commit command. Keywords FEATURE, BUGFIX, TASK, DOCS; `--flag SECURITY` or `--flag !!!` for flagged changes. A body that says why goes in on stdin with `--body-file -`; attribution lines your own instructions require (such as a `Co-Authored-By:` line) go in as one `--trailer "<line>"` each, and `cw` puts them last:
+2. `cw commit msg --task <id> --summary "<Imperative summary>" --keyword FEATURE` writes the message file of the git preset into the task state and prints the commit command. Use the form `cw context` prints under next: with the `default` preset the keywords are FEATURE, BUGFIX, TASK, DOCS, with `--flag SECURITY` or `--flag !!!` for flagged changes; a preset without keywords (such as `ticket-suffix`) takes no `--keyword` and adds the ticket to the summary itself, so leave the ticket out of `--summary`. A body that says why goes in on stdin with `--body-file -`; attribution lines your own instructions require (such as a `Co-Authored-By:` line) go in as one `--trailer "<line>"` each, and `cw` puts them last:
 
    ```bash
    cw commit msg --task <id> --summary "<Imperative summary>" --keyword FEATURE --body-file - --trailer "Co-Authored-By: …" <<'EOF'

@@ -37,6 +37,14 @@ function whatAndWhy({ task, ticket, spec }) {
   return [lead, context, bullets(requirements)].filter(Boolean).join('\n\n');
 }
 
+// The task's packages with their paths, from the classification.
+function affectedPackages({ task, config }) {
+  return bullets((task.packages ?? []).map((id) => {
+    const pkg = config.packages.find((item) => item.id === id);
+    return pkg ? `${id} (\`${pkg.path}\`)` : id;
+  }));
+}
+
 // Only what cw verified: the passing checks of the final run and the proofs that hold.
 function testing({ report, checks }) {
   const lines = [];
@@ -84,6 +92,7 @@ export function prBody({ task, config, ticket = null, spec = '', report = null, 
   const preset = config.git.conventions;
   const builders = {
     'What & why': () => whatAndWhy({ task, ticket, spec }),
+    'Affected packages': () => affectedPackages({ task, config }),
     Testing: () => testing({ report, checks }),
     'Risks & deploy steps': () => risks({ report, commits, preset }),
     'Open points': () => openPoints({ report, reviews }),

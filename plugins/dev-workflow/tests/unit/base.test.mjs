@@ -175,6 +175,15 @@ test('branch names follow the default preset', () => {
   for (const branch of ['main', 'release/1.2', 'APP-1/chore/a-b']) assert.doesNotMatch(branch, pattern);
 });
 
+test('branch names follow the ticket-suffix preset: lowercase ticket, chore- without one', () => {
+  const suffix = JSON.parse(readFileSync(join(pluginRoot, 'presets', 'git', 'ticket-suffix.json'), 'utf8'));
+  assert.equal(renderBranch(suffix, { ticket: 'NV-9', type: 'bugfix', slug: 'cre-totaliva' }), 'nv-9-cre-totaliva');
+  assert.equal(renderBranch(suffix, { ticket: 'NO-TICKET', type: 'feature', slug: 'tidy-readme', noTicket: true }), 'chore-tidy-readme');
+  const pattern = branchPattern(suffix, '^[A-Z][A-Z0-9]+-[0-9]+$', 'NO-TICKET');
+  for (const branch of ['nv-9-cre-totaliva', 'ops-12-a-b', 'chore-tidy-readme']) assert.match(branch, pattern);
+  for (const branch of ['main', 'release-candidate', 'NV-9/bugfix/a-b']) assert.doesNotMatch(branch, pattern);
+});
+
 test('frontmatter: scalars, lists, nested keys and errors with a line', () => {
   const { data, body } = parseFrontmatter(
     '---\nname: express-route\nrole: implementer\nwhen:\n  paths: ["src/**/*.{ts,tsx}", "a,b"]\n  keywords:\n    - route\n    - endpoint\nrules: [EXPRESS-ASYNC-ERRORS]\n---\n1. Step.\n',

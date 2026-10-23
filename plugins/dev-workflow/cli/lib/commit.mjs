@@ -3,7 +3,7 @@
 // task branch that belong elsewhere.
 import { branchExists, commitsBetween, git, gitResult, lines } from './git.mjs';
 import { failedError, preconditionError, usageError } from './out.mjs';
-import { render, templateToRegExp } from './template.mjs';
+import { branchTemplate, render, templateToRegExp } from './template.mjs';
 import { NO_TICKET_ALIAS, isNoTicket } from './ticket.mjs';
 
 const ATTRIBUTION = /^(Co-Authored-By|Signed-off-by):/i;
@@ -15,6 +15,14 @@ const LOWERCASE_START = /^\p{Ll}/u;
 
 const escapeRegExp = (text) => String(text).replace(/[\\^$+*?.()|[\]{}]/g, '\\$&');
 const bare = (value) => String(value).trim().replace(/^\[(.*)\]$/, '$1').toUpperCase();
+
+// A preset with commit.summary builds the summary from that template ({text}, {ticket}) and has no
+// keywords; without it the summary is "[FLAGS][KEYWORD] text" (§10).
+export const isTemplated = (preset) => typeof preset.commit.summary === 'string';
+const summaryTemplate = (preset, noTicket) => (noTicket ? preset.commit.summaryNoTicket ?? '{text}' : preset.commit.summary);
+
+// The summary line a templated preset builds: "Fix it" -> "Fix it (APP-42)".
+export const templatedSummary = (preset, { text, ticket, noTicket }) => render(summaryTemplate(preset, noTicket), { text, ticket });
 
 // 'feature', 'FEATURE' and '[FEATURE]' -> '[FEATURE]'.
 export function normalizeKeyword(preset, value) {
@@ -69,8 +77,10 @@ const summaryPattern = (preset) => {
 };
 
 // "[!!!][FEATURE] Add x" or "[!!!] [FEATURE] Add x" -> { flags: ['!!!'], keyword: 'FEATURE', text: 'Add x' }.
+// A templated preset has neither: the whole summary is the text.
 export function parseSummary(summary, preset) {
   const result = { flags: [], keyword: null, text: String(summary) };
+  if (isTemplated(preset)) return { ...result, text: result.text.trim() };
   let rest = String(summary);
   for (let match = /^\[([^\]]+)\]\s*/.exec(rest); match; match = /^\[([^\]]+)\]\s*/.exec(rest)) {
     if (preset.commit.flags.includes(match[1])) result.flags.push(match[1]);
@@ -85,25 +95,38 @@ export function parseSummary(summary, preset) {
 // The PR/MR title (§8 Decided in P2): the oldest commit's keyword and text with the flags of all the
 // commits, in preset order; null when the oldest commit has no keyword. commits: [{ subject }], oldest first.
 export function titleOf(preset, commits) {
+  if (isTemplated(preset)) return commits[0].subject;
   const first = parseSummary(commits[0].subject, preset);
   if (!first.keyword) return null;
   const used = new Set(commits.flatMap((commit) => parseSummary(commit.subject, preset).flags));
   return `${preset.commit.flags.filter((flag) => used.has(flag)).map((flag) => `[${flag}]`).join('')}[${first.keyword}] ${first.text}`;
 }
 
-// Findings for the first line: { level: 'error' | 'advisory', message }.
-export function lintSummary(preset, line) {
+// The text of a templated summary, or null when the line does not follow the template for the ticket.
+function templatedText(preset, line, { ticket, noTicket }) {
+  const template = summaryTemplate(preset, noTicket);
+  const tokens = [...template.matchAll(/\{([a-zA-Z.]+)\}/g)].map((match) => match[1]);
+  const match = templateToRegExp(template, { text: '.+', ticket: escapeRegExp(ticket ?? '') }).exec(line);
+  return match ? match[tokens.indexOf('text') + 1] : null;
+}
+
+// Findings for the first line: { level: 'error' | 'advisory', message }. A templated preset needs the
+// ticket: { ticket, noTicket }.
+export function lintSummary(preset, line, options = {}) {
   const findings = [];
   const error = (message) => findings.push({ level: 'error', message });
   if (FORBIDDEN_PREFIX.test(line)) error('fixup!, squash!, amend! and WIP commits are not allowed; squash them into the commit they fix');
-  const match = summaryPattern(preset).exec(line);
-  if (!match) {
-    error(`the summary "${line}" must start with one keyword ${preset.commit.keywords.map((k) => `[${k}]`).join(' ')}, flags ${preset.commit.flags.map((f) => `[${f}]`).join(' ')} before it`);
-  } else if (!match[2].trim()) {
-    error('the summary has no text after the keyword');
-  } else if (LOWERCASE_START.test(match[2])) {
-    error('start the summary text with a capital letter (imperative mood: "Add …")');
+  let text;
+  if (isTemplated(preset)) {
+    text = templatedText(preset, line, options);
+    const shape = render(summaryTemplate(preset, options.noTicket), { text: '<Summary>', ticket: options.ticket });
+    if (text === null) error(`the summary "${line}" must have the form "${shape}"`);
+  } else {
+    text = summaryPattern(preset).exec(line)?.[2] ?? null;
+    if (text === null) error(`the summary "${line}" must start with one keyword ${preset.commit.keywords.map((k) => `[${k}]`).join(' ')}, flags ${preset.commit.flags.map((f) => `[${f}]`).join(' ')} before it`);
   }
+  if (text !== null && !text.trim()) error(isTemplated(preset) ? 'the summary has no text' : 'the summary has no text after the keyword');
+  else if (text !== null && LOWERCASE_START.test(text)) error('start the summary text with a capital letter (imperative mood: "Add …")');
   if (line.length > preset.commit.summaryMax) error(`the summary line is ${line.length} characters (max ${preset.commit.summaryMax})`);
   else if (line.length > preset.commit.summaryIdeal) findings.push({ level: 'advisory', message: `the summary line is ${line.length} characters (ideally ≤ ${preset.commit.summaryIdeal})` });
   return findings;
@@ -112,7 +135,7 @@ export function lintSummary(preset, line) {
 // The whole message: summary, blank second line, body width, and the Relates-to trailer (§10).
 export function lintMessage(preset, message, { ticket, noTicket, noTicketKey }) {
   const lines = String(message).replace(/\r\n?/g, '\n').replace(/\s+$/, '').split('\n');
-  const findings = lintSummary(preset, lines[0]);
+  const findings = lintSummary(preset, lines[0], { ticket, noTicket });
   const error = (text) => findings.push({ level: 'error', message: text });
   if (lines.length > 1 && lines[1].trim() !== '') error('the second line must be blank');
   let end = lines.length;
@@ -131,33 +154,40 @@ export function lintMessage(preset, message, { ticket, noTicket, noTicketKey }) 
   if (noTicket) {
     const forbidden = [noTicketKey, NO_TICKET_ALIAS].map((key) => `Relates to ${key}`);
     if (content.some((line) => forbidden.includes(line))) error(`remove "Relates to ${noTicketKey}": the no-ticket key has no ticket to relate to`);
-  } else {
-    const expected = render(preset.commit.trailers[0] ?? 'Relates to {ticket}', { ticket });
+  } else if (preset.commit.trailers.length) {
+    const expected = render(preset.commit.trailers[0], { ticket });
     if (!trailers.includes(expected)) error(`the message must end with "${expected}" (attribution lines may follow it)`);
   }
   return findings;
 }
 
-// The branch must follow the preset's {ticket}/{type}/{slug} for the task's ticket.
-export function lintBranch(preset, branch, ticket) {
-  const pattern = templateToRegExp(preset.branch, {
+// The branch must follow the preset's branch template ({ticket}/{type}/{slug}, or branchNoTicket for
+// the no-ticket key) for the task's ticket.
+export function lintBranch(preset, branch, ticket, { noTicket = false } = {}) {
+  const template = branchTemplate(preset, noTicket);
+  const pattern = templateToRegExp(template, {
     ticket: escapeRegExp(ticket),
+    ticketLower: escapeRegExp(String(ticket).toLowerCase()),
     type: preset.types.map(escapeRegExp).join('|'),
     slug: String(preset.slug).replace(/^\^/, '').replace(/\$$/, ''),
   });
-  return pattern.test(branch) ? [] : [{ level: 'error', message: `the branch ${branch} does not match ${preset.branch} for ${ticket} (types ${preset.types.join(', ')})` }];
+  const types = template.includes('{type}') ? ` (types ${preset.types.join(', ')})` : '';
+  return pattern.test(branch) ? [] : [{ level: 'error', message: `the branch ${branch} does not match ${template} for ${ticket}${types}` }];
 }
 
 // Builds the commit message; problems with the summary are exit 1, the ideal length a warning.
 // trailers (e.g. Co-Authored-By lines an agent's instructions require) go last, after the ticket trailer.
 export function buildMessage(preset, { ticket, noTicket, summary, keyword, flags = [], body = '', trailers = [] }) {
   const text = String(summary ?? '').trim();
-  const fix = 'Pass --summary "<Imperative summary>" without the keyword; the keyword and flags come from --keyword and --flag.';
+  const fix = isTemplated(preset)
+    ? `Pass --summary "<Imperative summary>" without the ticket; cw adds it (${render(summaryTemplate(preset, noTicket), { text: '<Summary>', ticket })}).`
+    : 'Pass --summary "<Imperative summary>" without the keyword; the keyword and flags come from --keyword and --flag.';
   if (!text) throw failedError('the summary is empty', fix);
   if (/\n/.test(text)) throw failedError('the summary must be one line', fix);
   if (text.startsWith('[')) throw failedError(`the summary "${text}" starts with "["`, fix);
-  const first = `${flags.join('')}${keyword} ${text}`;
-  const findings = lintSummary(preset, first);
+  if (isTemplated(preset) && !noTicket && text.includes(ticket)) throw failedError(`the summary "${text}" names the ticket ${ticket}`, fix);
+  const first = isTemplated(preset) ? templatedSummary(preset, { text, ticket, noTicket }) : `${flags.join('')}${keyword} ${text}`;
+  const findings = lintSummary(preset, first, { ticket, noTicket });
   const errors = findings.filter((finding) => finding.level === 'error');
   if (errors.length) throw failedError(errors.map((finding) => finding.message).join('; '), 'Shorten or reword --summary.');
   const parts = [first];
@@ -216,7 +246,7 @@ export function lintRange({ config, workTree, task, last = false }) {
     throw preconditionError(`The task branch ${task.branch} does not exist in ${workTree}.`, `Run cw ws setup --task ${task.id} first.`);
   }
   const options = { ticket: task.ticket, noTicket: isNoTicket(config, task.ticket), noTicketKey: config.git.noTicketKey };
-  const findings = lintBranch(preset, task.branch, task.ticket).map((finding) => ({ commit: null, ...finding }));
+  const findings = lintBranch(preset, task.branch, task.ticket, { noTicket: options.noTicket }).map((finding) => ({ commit: null, ...finding }));
   const all = taskCommits(workTree, task);
   const commits = last ? all.slice(-1) : all;
   for (const commit of commits) {

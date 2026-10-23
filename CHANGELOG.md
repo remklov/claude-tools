@@ -4,6 +4,14 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.4.0 - 2026-10-23
+
+### Added
+
+- The git preset `ticket-suffix`: branch `{ticketLower}-{slug}` (`chore-{slug}` without a ticket), commit summary `<Summary> (<TICKET>)` without keywords, flags or trailers, the PR/MR title from the oldest commit's summary.
+- Presets may set `branchNoTicket`, the branch token `{ticketLower}`, and `commit.summary` / `commit.summaryNoTicket` templates; `cw commit msg` then takes no `--keyword`.
+- The PR/MR section "Affected packages" (the task's packages with their paths).
+
 ## dev-workflow 0.3.0 - 2026-10-23
 
 ### Changed

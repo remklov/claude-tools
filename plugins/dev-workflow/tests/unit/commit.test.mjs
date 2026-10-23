@@ -164,3 +164,43 @@ test('lintRange reports a PR/MR title that the flags of later commits push over 
   app('update-ref', '-d', `refs/remotes/origin/${task.branch}`);
   assert.equal(lintRange({ config, workTree: fx.app, task: { ...task, prUrl: 'https://github.com/acme/app/pull/1' } }).errors, 0);
 });
+
+test('the ticket-suffix preset: summary "<text> (<ticket>)", no keywords, flags or trailers', () => {
+  const suffix = loadPreset('ticket-suffix');
+  const options = { ticket: 'NV-9', noTicket: false, noTicketKey: 'NO-TICKET' };
+  const errors = (message, opts = options) => lintMessage(suffix, message, opts).filter((f) => f.level === 'error').map((f) => f.message);
+
+  const { message } = buildMessage(suffix, { ...options, summary: 'Fix the CRE totalIva per Anexo II', body: 'Why it changed.' });
+  assert.equal(message, 'Fix the CRE totalIva per Anexo II (NV-9)\n\nWhy it changed.\n');
+  assert.deepEqual(errors(message), []);
+  assert.equal(buildMessage(suffix, { ticket: 'NO-TICKET', noTicket: true, summary: 'Tidy the readme' }).message, 'Tidy the readme\n');
+  assert.throws(() => buildMessage(suffix, { ...options, summary: 'Fix the CRE (NV-9)' }), (error) => error.exitCode === 1 && /without the ticket; cw adds it \(<Summary> \(NV-9\)\)/.test(error.fix));
+
+  assert.deepEqual(errors('[BUGFIX] Fix the CRE (NV-9)'), [], 'brackets are text here; the form is what counts');
+  assert.deepEqual(errors('Fix the CRE'), ['the summary "Fix the CRE" must have the form "<Summary> (NV-9)"']);
+  assert.deepEqual(errors('Fix the CRE (NV-8)'), ['the summary "Fix the CRE (NV-8)" must have the form "<Summary> (NV-9)"']);
+  assert.deepEqual(errors('fix the CRE (NV-9)'), ['start the summary text with a capital letter (imperative mood: "Add …")']);
+  assert.deepEqual(errors('Fix the CRE (NV-9)\n\nBody.\n\nCo-Authored-By: A <a@example.com>'), [], 'no Relates-to trailer is required');
+  assert.deepEqual(errors('Tidy the readme', { ticket: 'NO-TICKET', noTicket: true, noTicketKey: 'NO-TICKET' }), []);
+
+  assert.deepEqual(lintBranch(suffix, 'nv-9-cre-totaliva', 'NV-9'), []);
+  assert.equal(lintBranch(suffix, 'NV-9/bugfix/cre-totaliva', 'NV-9').length, 1);
+  assert.match(lintBranch(suffix, 'nv-8-cre-totaliva', 'NV-9')[0].message, /does not match \{ticketLower\}-\{slug\} for NV-9$/);
+  assert.deepEqual(lintBranch(suffix, 'chore-tidy-readme', 'NO-TICKET', { noTicket: true }), []);
+  assert.equal(lintBranch(suffix, 'no-ticket-tidy-readme', 'NO-TICKET', { noTicket: true }).length, 1);
+});
+
+test('cw commit msg and cw commit lint with the ticket-suffix preset', (t) => {
+  const fx = makeInPlace(t, { config: inPlaceConfig({ git: { preset: 'ticket-suffix', noTicketKey: 'NO-TICKET' } }) });
+  const config = withDefaults(JSON.parse(JSON.stringify(inPlaceConfig({ git: { preset: 'ticket-suffix', noTicketKey: 'NO-TICKET' } }))));
+  assert.equal(config.git.conventions.id, 'ticket-suffix');
+  const git = gitIn(fx.app, fx.env);
+  git('switch', '-q', '-c', 'nv-9-cre-totaliva');
+  write(fx.app, { 'src/cre.mjs': 'export const cre = 1;\n' });
+  git('add', '-A');
+  git('commit', '-q', '-m', 'Fix the CRE totalIva (NV-9)');
+  const base = git('rev-parse', 'HEAD~1');
+  const task = { id: 't1', ticket: 'NV-9', branch: 'nv-9-cre-totaliva', base: { commit: base }, createdAt: new Date(0).toISOString() };
+  const result = lintRange({ config, workTree: fx.app, task });
+  assert.equal(result.errors, 0, JSON.stringify(result.findings));
+});

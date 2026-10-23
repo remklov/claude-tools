@@ -5,7 +5,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { listFlag } from '../lib/args.mjs';
 import { checksExitCode, runChecks } from '../lib/checks.mjs';
-import { buildMessage, lintRange, normalizeFlags, normalizeKeyword } from '../lib/commit.mjs';
+import { buildMessage, isTemplated, lintRange, normalizeFlags, normalizeKeyword } from '../lib/commit.mjs';
 import { packageById } from '../lib/config.mjs';
 import { readText, writeAtomic } from '../lib/fsx.mjs';
 import { changedFiles, currentBranch, tryGit } from '../lib/git.mjs';
@@ -169,7 +169,8 @@ export const commands = [
       const changed = task.base?.commit ? changedFiles(workTree, task.base.commit) : [];
       const rules = applicableRules(buildRulebook(ws, packs), { files: [...new Set([...(task.paths ?? []), ...changed])], areas: task.areas });
       const spec = taskPath(ws, task.id, 'spec.md');
-      const keywords = ws.config.git.conventions.commit.keywords.join('|');
+      const { keywords } = ws.config.git.conventions.commit;
+      const keywordFlag = keywords.length ? ` --keyword ${keywords.join('|')}` : '';
       const git = gitForm(ws);
       const value = {
         task: task.id,
@@ -192,7 +193,7 @@ export const commands = [
           `cw checks --changed --task ${task.id}`,
           // With -C <appRoot>, git reads the paths from the work tree, not from the project root.
           ws.mode === 'in-place' ? `${git} add <files relative to ${ws.appRoot}/, or absolute>` : `${git} add <files>`,
-          `cw commit msg --task ${task.id} --summary "<Imperative summary>" --keyword ${keywords}`,
+          `cw commit msg --task ${task.id} --summary "<Imperative summary>"${keywordFlag}`,
           `${git} commit -F ${quote(taskPath(ws, task.id, 'commit-msg.txt'))}`,
           `cw commit lint --task ${task.id}`,
           `cw prove --task ${task.id} --test <package>:<file> --change <file>`,
@@ -242,7 +243,7 @@ export const commands = [
   {
     path: ['commit', 'msg'],
     group: 'implementer',
-    usage: 'cw commit msg --task <id> --summary <text> --keyword <FEATURE|BUGFIX|TASK|DOCS> [--flag <!!!|SECURITY>] [--body-file <file>|-] [--trailer "<Key: value>"]… [--out <file>]',
+    usage: 'cw commit msg --task <id> --summary <text> [--keyword <FEATURE|BUGFIX|TASK|DOCS>] [--flag <!!!|SECURITY>] [--body-file <file>|-] [--trailer "<Key: value>"]… [--out <file>]',
     summary: 'Write the commit message of the git preset to a file for git commit -F (body from a file or stdin, trailers last)',
     flags: { task: 'string', summary: 'string', keyword: 'string', flag: 'list', 'body-file': 'string', trailer: 'list', out: 'string' },
     run(ctx) {
@@ -250,8 +251,15 @@ export const commands = [
       const preset = ws.config.git.conventions;
       const workTree = requireWorkTree(ws, task);
       const summary = requireFlag(ctx.flags, 'summary', 'Pass --summary "<Imperative summary>".');
-      const keyword = normalizeKeyword(preset, requireFlag(ctx.flags, 'keyword', `Pass --keyword ${preset.commit.keywords.join('|')}.`));
-      const flags = normalizeFlags(preset, listFlag(ctx.flags, 'flag'));
+      // A templated preset (commit.summary) has no keywords or flags; values passed anyway are ignored.
+      let keyword = null;
+      let flags = [];
+      if (isTemplated(preset)) {
+        if (ctx.flags.keyword || listFlag(ctx.flags, 'flag').length) ctx.out.warn(`the git preset ${preset.id} has no keywords or flags; --keyword and --flag are ignored`);
+      } else {
+        keyword = normalizeKeyword(preset, requireFlag(ctx.flags, 'keyword', `Pass --keyword ${preset.commit.keywords.join('|')}.`));
+        flags = normalizeFlags(preset, listFlag(ctx.flags, 'flag'));
+      }
       const body = ctx.flags['body-file'] ? readBody(ctx) : '';
       // Each --trailer is one line as given (no comma splitting): "Co-Authored-By: Name <mail>".
       const trailers = (ctx.flags.trailer ?? []).map((line) => line.trim());
