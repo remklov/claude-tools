@@ -2,7 +2,8 @@
 // start or continue the reviewer, read the review, send findings back, and reset the work after a
 // misclassification. Each prints exactly what the orchestrator passes on: the Agent call parameters
 // or the SendMessage text for the SAME agent (D4). An agent recorded in an earlier session (D3 rebind)
-// is never sent a message: it gets a fresh Agent call.
+// is never sent a message: it gets a fresh Agent call. So does an implementer whose context grew past
+// workflow.freshImplementerAboveTokens when the work goes back to it (ADR 0012).
 import { existsSync, renameSync, rmSync } from 'node:fs';
 import { agentCall, findingsToFix, returnMessage, reviewerFollowUp, reviewerRecheck, specChangedMessage, writeBrief } from '../lib/brief.mjs';
 import { keepWork, releaseWorktree, renderTaskBrief, resetWork, resolveBase, sameCommit, taskBranchTip, unknownChanges } from '../lib/cycle.mjs';
@@ -13,6 +14,7 @@ import { failedError, preconditionError, usageError } from '../lib/out.mjs';
 import { prBodyPath } from '../lib/pr.mjs';
 import { fence } from '../lib/report.mjs';
 import { STEPS_TOTAL, isActive, listTasks, readRoundFile, setResumeBranch, staleAgent, transition, updateTask } from '../lib/task.mjs';
+import { kTokens, measureAgentContext } from '../lib/transcript.mjs';
 import { taskPath } from '../lib/workspace.mjs';
 import { mainCheckout } from '../lib/worktree.mjs';
 import { emit, loadTaskContext, requireFlag } from './common.mjs';
@@ -70,6 +72,7 @@ const staleReason = (task, role) =>
 function printDelegation(ctx, value) {
   const { out } = ctx;
   if (value.freshAgent) out.print(`A fresh ${value.role}: ${value.freshAgent}.`);
+  if (value.context?.unmeasured) out.print(value.context.unmeasured);
   if (value.agentCall) {
     out.print('Call the Agent tool with exactly these parameters:');
     out.print(fence(value.agentCall));
@@ -92,7 +95,8 @@ const leftTaskBranch = (ws, task) => ws.mode === 'in-place' && branchExists(ws.w
 function delegateImplementer(ws, task, mutate, { fresh }) {
   const preview = structuredClone(task);
   mutate(preview, { resumeBranch: false });
-  const rendered = renderTaskBrief(ws, preview, 'implementer');
+  // A fresh agent of a started task gets the handover and the branch state (ADR 0012).
+  const rendered = renderTaskBrief(ws, preview, 'implementer', { takeover: fresh && task.round >= 1 });
   const handover = fresh && ws.mode === 'worktree' ? releaseWorktree(ws, task) : { released: null, resumeBranch: false, warnings: [] };
   const { task: updated } = updateTask(ws, task.id, (current) => mutate(current, handover), { expectRev: task.rev });
   const path = writeBrief(ws, updated, 'implementer', rendered.text);
@@ -187,7 +191,10 @@ function restartImplementer(ctx, ws, task) {
   const resume = leftTaskBranch(ws, task);
   const previous = task.agents.implementer?.id ?? null;
   const { task: restarted, brief, handover } = delegateImplementer(ws, task, (current, released) => {
-    current.history.push({ at: now(), from: current.phase, to: current.phase, note: `a fresh implementer for round ${current.round}${previous ? ` (was ${previous})` : ''}`, by: 'cw task start --new-agent' });
+    current.history.push({
+      at: now(), from: current.phase, to: current.phase, note: `a fresh implementer for round ${current.round}${previous ? ` (was ${previous})` : ''}`, by: 'cw task start --new-agent',
+      agentSwitch: { role: 'implementer', reason: 'new-agent', previous },
+    });
     current.steps = freshSteps();
     forgetImplementer(ws, current, released);
     if (ws.mode === 'in-place') setResumeBranch(current, resume, 'handover');
@@ -468,14 +475,40 @@ function checkReturn(ws, task, mode, ctx) {
   return latest.data ? { round: latest.round, data: latest.data } : null;
 }
 
-// Why the next round needs a fresh implementer Agent call instead of a SendMessage; null if none.
-function freshImplementerReason(ws, task, ctx) {
-  if (ctx.flags['new-agent']) return '--new-agent';
-  if (ws.mode === 'worktree' && !(task.workTree && existsSync(task.workTree))) {
-    return `the recorded worktree ${task.workTree ?? '(none)'} is gone, and with it the implementer's cwd`;
+// The implementer's context against workflow.freshImplementerAboveTokens (ADR 0012): every call of an
+// agent continued by SendMessage reads its whole context again, while a fresh one starts from the
+// brief. null when the rule is off or no agent is recorded; { tokens, limit, path, over } when
+// measured; { tokens: null, unmeasured } when the size cannot be read, and the SendMessage stays.
+function implementerContext(ws, task, env) {
+  const limit = ws.config.workflow.freshImplementerAboveTokens;
+  const agent = task.agents.implementer;
+  if (!limit || !agent?.id) return null;
+  const measured = measureAgentContext(agent, env);
+  if (measured.tokens === null) {
+    return { tokens: null, limit, path: measured.path, unmeasured: `The context size of ${agent.id} is unknown (${measured.reason}), so it gets the SendMessage.` };
   }
-  if (staleAgent(task, 'implementer')) return staleReason(task, 'implementer');
-  return null;
+  return { tokens: measured.tokens, limit, path: measured.path, over: measured.tokens > limit };
+}
+
+// Why the next round needs a fresh implementer Agent call instead of a SendMessage: { reason, why,
+// switch } with reason null for none. why is the short form for the history; switch the record of it.
+function freshImplementerReason(ws, task, ctx) {
+  const previous = task.agents.implementer?.id ?? null;
+  const fresh = (reason, why, extra = {}) => ({ reason, why, switch: { role: 'implementer', previous, ...extra } });
+  if (ctx.flags['new-agent']) return fresh('--new-agent', '--new-agent', { reason: 'new-agent' });
+  if (ws.mode === 'worktree' && !(task.workTree && existsSync(task.workTree))) {
+    return fresh(`the recorded worktree ${task.workTree ?? '(none)'} is gone, and with it the implementer's cwd`, 'its worktree is gone', { reason: 'worktree-gone' });
+  }
+  if (staleAgent(task, 'implementer')) return fresh(staleReason(task, 'implementer'), 'an agent of an earlier session', { reason: 'earlier-session' });
+  const context = implementerContext(ws, task, ctx.env);
+  if (context?.over) {
+    const size = `${kTokens(context.tokens)} > ${kTokens(context.limit)}`;
+    return {
+      ...fresh(`the context of ${previous} is ${kTokens(context.tokens)} tokens, above workflow.freshImplementerAboveTokens (${kTokens(context.limit)})`, `context ${size}`, { reason: 'context', tokens: context.tokens, limit: context.limit }),
+      context,
+    };
+  }
+  return { reason: null, why: null, switch: null, context };
 }
 
 function giveBack(ctx) {
@@ -483,7 +516,7 @@ function giveBack(ctx) {
   requireActive(task);
   const mode = returnMode(ctx);
   const review = checkReturn(ws, task, mode, ctx);
-  const fresh = freshImplementerReason(ws, task, ctx);
+  const { reason: fresh, why, switch: agentSwitch, context } = freshImplementerReason(ws, task, ctx);
   const implementer = task.agents.implementer?.id;
   if (!fresh && !implementer) {
     throw preconditionError(`No implementer agent is recorded for ${task.id}, so there is nobody to send the message to.`, `Start a fresh one: cw task return --task ${task.id}${mode === 'spec' ? ' --spec-changed --note "…"' : mode === 'continue' ? ' --continue --note "…"' : ''} --new-agent.`);
@@ -495,6 +528,9 @@ function giveBack(ctx) {
     const historyNote = mode === 'spec' ? `spec changed: ${note}` : mode === 'continue' ? `the user continues after the escalation: ${note}` : `review round ${current.reviewRound} requested changes`;
     transition(current, 'implement', { note: historyNote, by: 'cw task return' });
     current.round += 1;
+    if (fresh) {
+      current.history.push({ at: now(), from: 'implement', to: 'implement', note: `a fresh implementer for round ${current.round} (${why})`, by: 'cw task return', agentSwitch });
+    }
     current.steps = freshSteps();
     current.returnedWith = { mode, review: review?.round ?? null, note };
     if (mode !== 'findings') {
@@ -523,6 +559,7 @@ function giveBack(ctx) {
     brief: brief.path,
     findings: review ? findingsToFix(review.data) : [],
     releasedWorktree: handover.released,
+    ...(context ? { context } : {}),
     ...(fresh ? { freshAgent: fresh, agentCall: agentCall(ws, back, 'implementer', brief.path) } : { sendMessage: { to: implementer, message } }),
     next: [
       ...(fresh ? [`cw task agent --task ${back.id} --role implementer --id <the agentId the Agent tool returned>`] : []),

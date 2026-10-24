@@ -28,7 +28,7 @@ const FIX = {
   'src/sum.mjs': 'export const sum = (a, b) => a + b;\nexport const sum3 = (a, b, c) => a + b + c;\n',
   'src/sum3.test.mjs': "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { sum3 } from './sum.mjs';\n\ntest('adds three', () => assert.equal(sum3(1, 2, 3), 6));\n",
 };
-const REPORT = { status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/sum3.test.mjs › adds three' }] };
+const REPORT = { status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/sum3.test.mjs › adds three' }], handover: { decisions: [], rejected: [], testing: ['cw checks --changed'], pitfalls: [], deviations: [] } };
 const PACKAGES = [{ id: 'app', path: '.', areas: ['backend'], checks: { test: 'node --test' }, testSingle: 'node --test {file}' }];
 
 // A feature task that went through the implementer steps and is now in review round 1, as the

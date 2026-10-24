@@ -4,6 +4,18 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.6.0 - 2026-10-24
+
+### Added
+
+- `workflow.freshImplementerAboveTokens` (default `150000`; `0` or `null` switch it off): `cw task return` measures the implementer's context in its Claude Code transcript and, above the threshold, prints a fresh Agent call with a takeover brief instead of the SendMessage. The output names the reason in one line, the task history records the switch with the measured size, and `cw task show` prints it. An unknown size keeps the SendMessage and says so (ADR 0012).
+- The SubagentStop hook records the agent's transcript path (`agent_transcript_path`).
+- A fresh implementer's brief (`cw task return`, `cw task start --new-agent`) has the section "Taking over from an earlier implementer": the branch state with the commits and the changed files, and the handover, risks and open points of the last report; no diff.
+
+### Changed
+
+- **Breaking for reports:** every implementer report carries `handover` (`decisions`, `rejected`, `testing`, `pitfalls`, `deviations`, each at most 8 notes of at most 400 characters); `cw report save` refuses a report without it, and a done report fills at least one list.
+
 ## dev-workflow 0.5.0 - 2026-10-23
 
 ### Added

@@ -8,6 +8,7 @@ export const implementerAgentType = (complexity) => `dev-workflow:implementer-${
 export const REVIEWER_AGENT = 'dev-workflow:reviewer';
 
 const cap = (text, max) => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
+const short = (sha) => String(sha ?? '').slice(0, 10);
 
 // The Agent call's description; the mod matches runs by it (§11), so it is stable per task and role.
 export const agentDescription = (task, role) => cap(role === 'reviewer' ? `Review · ${task.ticket} · ${task.title}` : `${task.ticket} · ${task.title}`, 60);
@@ -85,9 +86,49 @@ export function specChangedMessage(task, note, briefPath, { setupFirst = false }
 
 const section = (title, lines) => (lines.length ? ['', `## ${title}`, '', ...lines] : []);
 
+// The brief stays small: the branch state lists files and commit subjects, never a diff.
+const MAX_LISTED_FILES = 80;
+const MAX_LISTED_COMMITS = 20;
+const HANDOVER_LABELS = [
+  ['decisions', 'Decisions and why'],
+  ['rejected', 'Rejected approaches'],
+  ['testing', 'Test commands and setups'],
+  ['pitfalls', 'Pitfalls'],
+  ['deviations', 'Deviations from the spec or a rule'],
+];
+
+const capped = (items, max, render, more) => [...items.slice(0, max).map(render), ...(items.length > max ? [more(items.length - max)] : [])];
+
+// What a fresh implementer takes over (ADR 0012): takeover { report: { round, data } | null, branch:
+// { head, commits, files } | null }.
+function takeoverLines(task, { report, branch }) {
+  const lines = [
+    `You take ${task.branch} over from an earlier implementer: its commits are on the branch. Read the spec, this handover and the findings, then the files they name; do not explore the whole change again.`,
+  ];
+  if (branch) {
+    lines.push('', '### Branch state', '', `- Head \`${short(branch.head)}\` · ${branch.commits.length} commit(s) since the base \`${short(task.base?.commit)}\`, newest first:`);
+    lines.push(...capped(branch.commits, MAX_LISTED_COMMITS, (commit) => `  - \`${short(commit.sha)}\` ${commit.subject}`, (n) => `  - … and ${n} older commit(s)`));
+    lines.push(`- Changed files since the base (${branch.files.length}):`);
+    lines.push(...capped(branch.files, MAX_LISTED_FILES, (file) => `  - ${file}`, (n) => `  - … and ${n} more`));
+  }
+  const data = report?.data;
+  if (data) {
+    lines.push('', `### Handover from the report of round ${report.round} (${data.status})`);
+    for (const [key, label] of HANDOVER_LABELS) {
+      const notes = data.handover?.[key] ?? [];
+      if (notes.length) lines.push('', `${label}:`, ...notes.map((note) => `- ${note}`));
+    }
+    if (!data.handover) lines.push('', 'That report has no handover.');
+    if (data.risks?.length) lines.push('', 'Risks:', ...data.risks.map((risk) => `- ${risk}`));
+    if (data.openPoints?.length) lines.push('', 'Open points:', ...data.openPoints.map((point) => `- ${point.tag ? `(${point.tag}) ` : ''}${point.text}`));
+  }
+  return lines;
+}
+
 // The brief as Markdown. rules: [{ id, title, severity, protected }]; procedures: [{ name, origin, description, body }].
-// decision: the user's decision after an escalation; movedFrom: the approved head a re-review starts from.
-export function renderBrief({ ws, task, role, specText, ticket = null, packages = [], rules = [], procedures = [], guardrails = [], findings = [], decision = null, previousReviewPath = null, reportPath = null, movedFrom = null }) {
+// decision: the user's decision after an escalation; takeover: what a fresh implementer inherits;
+// movedFrom: the approved head a re-review starts from.
+export function renderBrief({ ws, task, role, specText, ticket = null, packages = [], rules = [], procedures = [], guardrails = [], findings = [], decision = null, takeover = null, previousReviewPath = null, reportPath = null, movedFrom = null }) {
   const tree = workTreeOf(ws, task);
   const base = task.base ? `\`${task.base.branch}\` @ \`${task.base.commit}\`` : 'recorded at task start';
   const gitLine =
@@ -126,6 +167,7 @@ export function renderBrief({ ws, task, role, specText, ticket = null, packages 
   lines.push(...section('Procedures', procedures.flatMap((procedure) => [`### ${procedure.name} (${procedure.origin}) — ${procedure.description}`, '', procedure.body.trim(), ''])));
   if (role === 'implementer') lines.push(...section(`Guardrails for complexity ${String(task.complexity ?? '').toUpperCase()}`, guardrails.map((item) => `- ${item}`)));
   if (role === 'implementer' && decision) lines.push(...section("The user's decision after the escalation", [decision]));
+  if (role === 'implementer' && takeover) lines.push(...section('Taking over from an earlier implementer', takeoverLines(task, takeover)));
   if (role === 'implementer' && findings.length) lines.push(...section('Review findings to fix', findings));
   if (role === 'reviewer') {
     lines.push(...section('Inputs', [

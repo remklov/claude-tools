@@ -20,6 +20,10 @@ The Agent call was refused or failed, the agent ended without a report, or its w
 - A fresh Agent call is always followed by `cw task agent --task <id> --role <implementer|reviewer> --id <agentId>`.
 - The SubagentStop hook keeps an agent running (at most twice) until it has saved its report or review; an agent that still ends without one is gone.
 
+## An implementer with a large context
+
+Every call of an agent continued with SendMessage reads its whole context again. `cw task return` measures the recorded implementer's context in its transcript (the input tokens of its last API call). Above `workflow.freshImplementerAboveTokens` (default 150000; `0` or `null` switch this off) it prints a fresh Agent call instead of the SendMessage, with the reason in one line, and records the switch in the task history (`cw task show`). The new agent's brief holds the spec, the handover and the risks of the last report, the findings and the branch state; in worktree mode `cw` releases the old agent's clean worktree. When the size cannot be read (no transcript found, an unreadable file), `cw` says so in one line and the SendMessage stays. Never ask the old agent for a handover first: its report already holds it, and the request would cost one more call with the full context.
+
 ## Misclassified and the reset
 
 After the new classification (O7: `cw classify --task <id>`, then the level with `--set`), `cw task reset --task <id>` decides by the state of the work tree:

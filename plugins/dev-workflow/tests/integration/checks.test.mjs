@@ -19,7 +19,7 @@ const MUL = {
   'src/mul.mjs': 'export const mul = (a, b) => a * b;\n',
   'src/mul.test.mjs': "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { mul } from './mul.mjs';\n\ntest('multiplies', () => assert.equal(mul(2, 3), 6));\n",
 };
-const REPORT = { status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }] };
+const REPORT = { status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }], handover: { decisions: [], rejected: [], testing: ['cw checks --changed'], pitfalls: [], deviations: [] } };
 
 // A task in phase implement with its base recorded, as cw task start (orchestrator area) leaves it.
 function startTask(fx, { type = 'feature', slug = 'mul-helper' } = {}) {
@@ -191,7 +191,7 @@ test('report save refuses stale checks, failing checks and lint errors; a wrong 
   assert.equal(failingJson.json().fix, 'fix the failures (never loosen a check), then run cw checks --changed again.', 'a failing JSON result names its fix');
   assert.match(save().stderr, /checks are fail/);
 
-  const blocked = run(['report', 'save'], { input: JSON.stringify({ status: 'blocked', acceptanceCriteria: [], blocked: { question: 'Which rounding?', needed: 'a decision' } }) });
+  const blocked = run(['report', 'save'], { input: JSON.stringify({ status: 'blocked', acceptanceCriteria: [], blocked: { question: 'Which rounding?', needed: 'a decision' }, handover: { decisions: [], rejected: [], testing: [], pitfalls: [], deviations: [] } }) });
   assert.equal(blocked.code, 0, blocked.stderr);
   assert.equal(readJson(taskPath(ws, id, 'report-1.json')).status, 'blocked');
 

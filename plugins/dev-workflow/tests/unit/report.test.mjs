@@ -11,6 +11,7 @@ const done = {
   status: 'done',
   acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }],
   openPoints: ['manual check of the UI', { text: 'follow up', tag: 'follow-up' }],
+  handover: { decisions: ['mul stays pure'], rejected: [], testing: ['node --test src/mul.test.mjs'], pitfalls: [], deviations: [] },
 };
 
 test('parseAgentJson: raw JSON or the last ```json fence; anything else is exit 1', () => {
@@ -36,6 +37,22 @@ test('validateDevReportInput: the schema and the status rules', () => {
   assert.match(errorsOf({ blocked: { question: 'q', needed: 'n' } })[0], /blocked must be null unless status is blocked/);
   assert.match(errorsOf({ status: 'misclassified', misclassified: { reason: 'r', suggested: 'xxl' } })[0], /suggested: must be one of s, m, l, xl/);
   assert.deepEqual(errorsOf({ status: 'misclassified', misclassified: { reason: 'needs a schema change', suggested: 'l' }, blocked: null }), []);
+});
+
+test('validateDevReportInput: every report carries a short handover; a done one is not empty', () => {
+  const errorsOf = (patch) => validateDevReportInput({ ...done, ...patch });
+  const { handover: _, ...withoutHandover } = done;
+  const missing = validateDevReportInput(withoutHandover);
+  assert.equal(missing.length, 1);
+  assert.match(missing[0], /^\$\.handover: is required: \{ "decisions": \[\], "rejected": \[\], "testing": \[\], "pitfalls": \[\], "deviations": \[\] \}/);
+  const empty = { decisions: [], rejected: [], testing: [], pitfalls: [], deviations: [] };
+  assert.match(errorsOf({ handover: empty })[0], /handover is empty: a done report names at least one/);
+  assert.deepEqual(errorsOf({ status: 'blocked', blocked: { question: 'Which API?', needed: 'a decision' }, handover: empty }), [], 'a blocked report may stop before there is anything to hand over');
+  assert.match(errorsOf({ handover: { ...empty, testing: ['x'], notes: [] } })[0], /handover\.notes: is not allowed/);
+  const { pitfalls: __, ...noPitfalls } = empty;
+  assert.match(errorsOf({ handover: { ...noPitfalls, testing: ['x'] } })[0], /handover\.pitfalls: is required/);
+  assert.match(errorsOf({ handover: { ...empty, testing: ['x'.repeat(401)] } })[0], /testing\[0\]: has 401 characters, at most 400/);
+  assert.match(errorsOf({ handover: { ...empty, decisions: Array.from({ length: 9 }, (_, i) => `d${i}`) } })[0], /decisions: has 9 items, at most 8/);
 });
 
 test('validateSavedDevReport accepts what report save writes and refuses a file without savedAt', () => {

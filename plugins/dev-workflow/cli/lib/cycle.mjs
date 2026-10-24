@@ -1,6 +1,6 @@
 // The orchestrator's delegation cycle (§6 O4–O8): the classification, the base a task starts from,
 // the briefs with their packages, rules and procedures, the reset after a misclassification, and the
-// handover of a worktree task to a new implementer agent (D3, D5).
+// handover of a task to a new implementer agent (D3, D5, ADR 0012).
 import { existsSync } from 'node:fs';
 import { findingsToFix, renderBrief, writeBrief } from './brief.mjs';
 import { classify, configRules } from './classify.mjs';
@@ -72,15 +72,44 @@ function returnedInputs(ws, task) {
   return { findings: review ? findingsToFix(review) : [], decision: returned.mode === 'continue' ? returned.note : null };
 }
 
+// The newest report up to the task's round ({ path, data, round }), or null.
+function latestReport(ws, task) {
+  for (let round = task.round; round >= 1; round -= 1) {
+    const file = readRoundFile(ws, task, 'report', round);
+    if (file.data) return { ...file, round };
+  }
+  return null;
+}
+
+// The committed state of the task branch: its head, the commits and the changed files since the base;
+// null before the branch exists. Read from the main checkout (worktree mode) or app/, so it holds while
+// the old agent's worktree is released.
+function branchState(ws, task) {
+  const repo = ws.mode === 'in-place' ? ws.workRepo : mainCheckout(ws);
+  if (!task.base?.commit || !existsSync(repo) || !branchExists(repo, task.branch)) return null;
+  const ref = `refs/heads/${task.branch}`;
+  return {
+    head: git(['rev-parse', ref], { cwd: repo }),
+    commits: commitsBetween(repo, task.base.commit, ref),
+    files: git(['diff', '--name-only', '--no-renames', '-z', `${task.base.commit}...${ref}`], { cwd: repo }).split('\0').filter(Boolean).sort(),
+  };
+}
+
+// What a fresh implementer takes over from the earlier one (ADR 0012): the handover of the newest
+// report and the branch state. The findings come with the round (returnedInputs).
+const takeoverInputs = (ws, task) => ({ report: latestReport(ws, task), branch: branchState(ws, task) });
+
 // The text of brief-<role>.md, without writing it: cw task start and cw task return render it before
 // they change the task, so a failure leaves the task as it was. The implementer's rules and procedures
 // follow the spec's paths and the changes so far; the reviewer's rules are exactly the set cw review
-// save checks (the changed files).
-export function renderTaskBrief(ws, task, role, { reportPath = null, previousReviewPath = null, movedFrom = null } = {}) {
+// save checks (the changed files). takeover: the brief is for a fresh implementer of a started task.
+export function renderTaskBrief(ws, task, role, { reportPath = null, previousReviewPath = null, movedFrom = null, takeover = false } = {}) {
   const packs = resolvePacks(ws);
   const book = buildRulebook(ws, packs);
   const specText = readText(taskPath(ws, task.id, 'spec.md'), '');
-  const changed = taskChangedFiles(ws, task);
+  const inherited = role === 'implementer' && takeover ? takeoverInputs(ws, task) : null;
+  // A fresh worktree agent has no work tree yet: the branch's changed files stand in for it.
+  const changed = unique([...taskChangedFiles(ws, task), ...(inherited?.branch?.files ?? [])]);
   const files = role === 'implementer' ? unique([...(task.paths ?? []), ...changed]) : changed;
   const rules = applicableRules(book, { files, areas: task.areas });
   const procedures = selectProcedures(loadProcedures(ws, packs), { role, paths: files, areas: task.areas, text: keywordText(parseSpec(specText)) });
@@ -97,6 +126,7 @@ export function renderTaskBrief(ws, task, role, { reportPath = null, previousRev
     guardrails: role === 'implementer' ? (GUARDRAILS[task.complexity] ?? []) : [],
     findings: returned.findings,
     decision: returned.decision,
+    takeover: inherited,
     reportPath,
     previousReviewPath,
     movedFrom,

@@ -1,6 +1,6 @@
 // JSON-schema subset validator shared by the config, ticket, report and review contracts:
-// type, required, properties, additionalProperties, enum, const, pattern, items, minItems,
-// minLength, minimum, maximum, oneOf. Returns a list of { path, message }.
+// type, required, properties, additionalProperties, enum, const, pattern, items, minItems, maxItems,
+// minLength, maxLength, minimum, maximum, oneOf. Returns a list of { path, message }.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { schemasDir } from './paths.mjs';
@@ -42,6 +42,7 @@ export function validate(schema, value, path = '$') {
     if (schema.minLength !== undefined && value.length < schema.minLength) {
       errors.push({ path, message: schema.minLength === 1 ? 'must not be empty' : `needs at least ${schema.minLength} characters` });
     }
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) errors.push({ path, message: `has ${value.length} characters, at most ${schema.maxLength} are allowed` });
   }
   if (typeof value === 'number') {
     if (schema.minimum !== undefined && value < schema.minimum) errors.push({ path, message: `must be ≥ ${schema.minimum}` });
@@ -49,6 +50,7 @@ export function validate(schema, value, path = '$') {
   }
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined && value.length < schema.minItems) errors.push({ path, message: `needs at least ${schema.minItems} item(s)` });
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push({ path, message: `has ${value.length} items, at most ${schema.maxItems} are allowed` });
     if (schema.items) value.forEach((item, i) => errors.push(...validate(schema.items, item, `${path}[${i}]`)));
   }
   if (typeOf(value) === 'object') {

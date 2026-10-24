@@ -1,7 +1,7 @@
 // The hook stdin fixtures and a runner that starts a hook script as Claude Code does: a node process
 // with the JSON input on stdin, its cwd the input's cwd. The fixtures follow the inputs logged by the P0
-// spike plugin (headless CLI 2.1.303; docs/PLAN.md Appendix D) with {{placeholders}} for what a test
-// sets. Helpers here never end in .test.mjs, so the test glob does not run them.
+// spike plugin (headless CLI 2.1.303; docs/PLAN.md Appendix D; agent_transcript_path as logged by
+// CLI 2.1.310, ADR 0012) with {{placeholders}} for what a test sets. Helpers here never end in .test.mjs, so the test glob does not run them.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { pluginRoot } from '../repo.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const DEFAULTS = { session: 'test-session', transcript: '/tmp/dw-hooks-fixture/transcript.jsonl', source: 'startup', stopHookActive: false };
+const DEFAULTS = { session: 'test-session', transcript: '/tmp/dw-hooks-fixture/test-session.jsonl', sessionDir: '/tmp/dw-hooks-fixture/test-session', source: 'startup', stopHookActive: false };
 
 export const hookScript = (name) => join(pluginRoot, 'hooks', `${name}.mjs`);
 

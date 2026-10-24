@@ -261,6 +261,13 @@ export const recordAgentStart = (ws, id, { role, agentId, agentType, at, session
     task.agents[role] = { ...(task.agents[role] ?? {}), id: agentId, type: agentType, startedAt: at, round: task.round, session };
   }, options);
 
+// SubagentStop: the agent's transcript as Claude Code reports it (agent_transcript_path), for the
+// context check of cw task return (ADR 0012). Only while the slot still holds that agent.
+export const recordAgentTranscript = (ws, id, { role, agentId, path }, options) =>
+  updateTask(ws, id, (task) => {
+    if (task.agents[role]?.id === agentId) task.agents[role] = { ...task.agents[role], transcript: path };
+  }, options);
+
 // SubagentStop (§9): counts the blocks per agent id; at most 2 are allowed.
 export const bumpStopBlocks = (ws, id, agentId, options) =>
   updateTask(ws, id, (task) => {

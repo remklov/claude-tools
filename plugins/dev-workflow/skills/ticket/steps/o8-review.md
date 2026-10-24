@@ -33,7 +33,7 @@ cw review show --task <id>
   cw task return --task <id>
   ```
 
-  It prints a SendMessage to the same implementer with the blocking findings and the ones marked "also" (`sendAlong`), or a fresh Agent call when that implementer is gone (`--new-agent`). Send it, wait, then back to O7 (`cw report show --task <id>`) and from there to this step.
+  It prints a SendMessage to the same implementer with the blocking findings and the ones marked "also" (`sendAlong`), or a fresh Agent call when that implementer is gone (`--new-agent`), belongs to an earlier session, or its context is larger than `workflow.freshImplementerAboveTokens` (default 150000 tokens). The fresh agent's brief carries the spec, the handover of the last report, the findings and the branch state, so it needs nothing from the old one. Do exactly what is printed: a SendMessage unchanged, or the Agent call followed by `cw task agent --task <id> --role implementer --id <agentId>`. Tell the user the one-line reason `cw` prints (`A fresh implementer: …`, or that the context size is unknown). Wait, then back to O7 (`cw report show --task <id>`) and from there to this step.
 - **escalated:** the last allowed round (`workflow.maxReviewRounds`) still requests changes. Show the user the open blocking findings and ask: continue with their decision, or stop.
   - Continue: `cw task return --task <id> --continue --note "<the user's decision>"`; the decision reaches the implementer.
   - Stop: `cw task end --task <id> --outcome escalated --note "<why>"`, then `cw task cleanup --task <id>` and the short report.
