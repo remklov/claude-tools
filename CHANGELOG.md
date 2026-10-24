@@ -4,6 +4,13 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.7.0 - 2026-10-25
+
+### Changed
+
+- **Breaking for reports:** step 4 of the implementer playbook ends with a rules check: the implementer runs `cw rules applicable --task <id>`, checks the lines it changed against each rule, as the reviewer does, and fixes each violation before the checks. A done report lists those rule IDs as `rulesChecked`; `cw report save` refuses one whose list differs from `cw rules applicable` and names the missing and the extra rules. The saved report keeps `rulesChecked` and `rulesApplicable` (ADR 0013).
+- `cw review save` names an empty `rulesChecked` as such instead of listing every missing rule.
+
 ## dev-workflow 0.6.0 - 2026-10-24
 
 ### Added

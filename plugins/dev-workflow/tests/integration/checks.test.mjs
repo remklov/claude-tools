@@ -120,10 +120,22 @@ test('in-place: from ws setup to a saved report, with cw run from the outer repo
   // SubagentStart records the agent before the report is saved (§9).
   const startedAt = new Date().toISOString();
   recordAgentStart(ws, id, { role: 'implementer', agentId: 'a1', agentType: 'dev-workflow:implementer-s', at: startedAt });
-  const saved = run(join(fx.app, 'src'), ['report', 'save'], { input: `My report:\n\`\`\`json\n${JSON.stringify(REPORT)}\n\`\`\`\n` });
+  // Step 4: a done report lists exactly the rules cw rules applicable prints for the change.
+  const unchecked = run(fx.root, ['report', 'save'], { input: JSON.stringify(REPORT) });
+  assert.equal(unchecked.code, 1);
+  assert.ok(unchecked.stderr.includes(`- rulesChecked is empty: check every rule that cw rules applicable --task ${id} lists, then list exactly their IDs\n`), unchecked.stderr);
+  const rulesChecked = run(fx.root, ['rules', 'applicable', '--json']).json().rules.map((rule) => rule.id);
+  assert.ok(rulesChecked.includes('CORE-SCOPE'), rulesChecked.join(', '));
+  const partial = run(fx.root, ['report', 'save'], { input: JSON.stringify({ ...REPORT, rulesChecked: [...rulesChecked.slice(1), 'CORE-REPRODUCIBLE-BUILDS'] }) });
+  assert.equal(partial.code, 1);
+  assert.ok(partial.stderr.includes(`- rulesChecked misses ${rulesChecked[0]}: check every rule that cw rules applicable --task ${id} lists\n`), partial.stderr);
+  assert.match(partial.stderr, /- rulesChecked lists CORE-REPRODUCIBLE-BUILDS, which do not apply to this task \(cw rules applicable --task \S+\): remove them\n/);
+  assert.equal(existsSync(taskPath(ws, id, 'report-1.json')), false, 'nothing was written');
+  const saved = run(join(fx.app, 'src'), ['report', 'save'], { input: `My report:\n\`\`\`json\n${JSON.stringify({ ...REPORT, rulesChecked })}\n\`\`\`\n` });
   assert.equal(saved.code, 0, saved.stderr);
   assert.match(saved.stdout, /^```json\n/);
   const report = readJson(taskPath(ws, id, 'report-1.json'));
+  assert.deepEqual([report.rulesChecked, report.rulesApplicable], [rulesChecked, rulesChecked]);
   assert.ok(report.savedAt > startedAt);
   assert.equal(report.checks.current, true);
   assert.equal(report.checks.overall, 'pass');
@@ -193,7 +205,8 @@ test('report save refuses stale checks, failing checks and lint errors; a wrong 
 
   const blocked = run(['report', 'save'], { input: JSON.stringify({ status: 'blocked', acceptanceCriteria: [], blocked: { question: 'Which rounding?', needed: 'a decision' }, handover: { decisions: [], rejected: [], testing: [], pitfalls: [], deviations: [] } }) });
   assert.equal(blocked.code, 0, blocked.stderr);
-  assert.equal(readJson(taskPath(ws, id, 'report-1.json')).status, 'blocked');
+  const blockedReport = readJson(taskPath(ws, id, 'report-1.json'));
+  assert.deepEqual([blockedReport.status, blockedReport.rulesChecked, blockedReport.rulesApplicable], ['blocked', [], null], 'a blocked report is not held to the rules');
 
   updateTask(ws, id, (task) => {
     task.phase = 'review';
@@ -244,7 +257,8 @@ test('report save counts the proofs that held and still run at HEAD; a proof of 
   app('mv', 'src/mul.test.mjs', 'src/multiply.test.mjs');
   app('commit', '-q', '-m', '[BUGFIX] Rename the mul test');
   assert.equal(run(['checks', '--changed']).code, 0);
-  const save = () => run(['report', 'save', '--json'], { input: JSON.stringify(REPORT) });
+  const rulesChecked = run(['rules', 'applicable', '--json']).json().rules.map((rule) => rule.id);
+  const save = () => run(['report', 'save', '--json'], { input: JSON.stringify({ ...REPORT, rulesChecked }) });
   const refused = save();
   assert.equal(refused.code, 1);
   assert.match(refused.json().details.errors.join('\n'), /a bug fix needs the regression test's failing run/);

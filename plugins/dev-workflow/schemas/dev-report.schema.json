@@ -18,6 +18,11 @@
         }
       }
     },
+    "rulesChecked": {
+      "description": "the IDs of cw rules applicable --task <id> the change was checked against (implementer playbook, step 4; docs/adr/0013); a done report lists exactly that set",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$" }
+    },
     "risks": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "openPoints": {
       "type": "array",

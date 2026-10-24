@@ -10,6 +10,7 @@ import { inPlaceConfig } from '../fixtures/repo.mjs';
 const done = {
   status: 'done',
   acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }],
+  rulesChecked: ['CORE-SCOPE'],
   openPoints: ['manual check of the UI', { text: 'follow up', tag: 'follow-up' }],
   handover: { decisions: ['mul stays pure'], rejected: [], testing: ['node --test src/mul.test.mjs'], pitfalls: [], deviations: [] },
 };
@@ -37,6 +38,9 @@ test('validateDevReportInput: the schema and the status rules', () => {
   assert.match(errorsOf({ blocked: { question: 'q', needed: 'n' } })[0], /blocked must be null unless status is blocked/);
   assert.match(errorsOf({ status: 'misclassified', misclassified: { reason: 'r', suggested: 'xxl' } })[0], /suggested: must be one of s, m, l, xl/);
   assert.deepEqual(errorsOf({ status: 'misclassified', misclassified: { reason: 'needs a schema change', suggested: 'l' }, blocked: null }), []);
+  assert.match(errorsOf({ rulesChecked: ['core-scope'] })[0], /rulesChecked\[0\]: must match/);
+  const { rulesChecked: _, ...unchecked } = done;
+  assert.deepEqual(validateDevReportInput(unchecked), [], 'the rules a done report checked are compared with the change in devReportProblems');
 });
 
 test('validateDevReportInput: every report carries a short handover; a done one is not empty', () => {
@@ -88,7 +92,9 @@ const goodState = {
   workTree: '/w', onBranch: true, branchNow: task.branch, dirty: [], tree: 'tree1', commits: [], added: [], changedFiles: ['src/mul.mjs'],
   checks: { latest: passing, current: passing },
 };
-const problems = (patch = {}, { report = { ...done, proofs: [] }, specText = SPEC, kind = task } = {}) =>
+// What buildDevReport makes of done for a change that one rule applies to.
+const built = { ...done, proofs: [], rulesApplicable: ['CORE-SCOPE'] };
+const problems = (patch = {}, { report = built, specText = SPEC, kind = task } = {}) =>
   devReportProblems({ ws: { config }, task: kind, report, state: { ...goodState, ...patch }, specText });
 
 test('devReportProblems: every done rule names its fix', () => {
@@ -111,7 +117,7 @@ test('devReportProblems: every done rule names its fix', () => {
   const only = { ...passing, data: { ...passing.data, only: ['lint'] } };
   assert.match(errorsOf({ checks: { latest: only, current: only } })[0], /did not cover every check \(--only\)/);
   assert.match(errorsOf({}, { kind: { ...task, type: 'bugfix' } })[0], /a bug fix needs the regression test's failing run: cw prove/);
-  assert.deepEqual(errorsOf({}, { kind: { ...task, type: 'bugfix' }, report: { ...done, proofs: [{ holds: true, testPath: 'src/mul.test.mjs' }] } }), []);
+  assert.deepEqual(errorsOf({}, { kind: { ...task, type: 'bugfix' }, report: { ...built, proofs: [{ holds: true, testPath: 'src/mul.test.mjs' }] } }), []);
   assert.deepEqual(problems({ added: ['src/mul.test.mjs', 'src/mul.mjs'] }).warnings, ['the new test src/mul.test.mjs has no holding proof (cw prove)']);
 });
 
@@ -124,7 +130,7 @@ test('devReportProblems: no-package checks name the config, not failures to fix'
 });
 
 test('devReportProblems: a committed node_modules path is refused with the command that removes it', () => {
-  const errorsOf = (ws) => devReportProblems({ ws, task, report: { ...done, proofs: [] }, state: { ...goodState, added: ['node_modules', 'web/node_modules', 'src/node_modules.mjs'] }, specText: SPEC }).errors
+  const errorsOf = (ws) => devReportProblems({ ws, task, report: built, state: { ...goodState, added: ['node_modules', 'web/node_modules', 'src/node_modules.mjs'] }, specText: SPEC }).errors
     .filter((error) => !/no commits/.test(error));
   assert.deepEqual(errorsOf({ config, mode: 'worktree' }), [
     'the commits add node_modules, web/node_modules (node_modules is never committed; a link from worktree.symlinkDirectories passes a "node_modules/" ignore pattern): git rm --cached node_modules web/node_modules, commit (step 6), then save the report again',
@@ -134,7 +140,16 @@ test('devReportProblems: a committed node_modules path is refused with the comma
 
 test('devReportProblems: stale proofs are shown as warnings and not counted for a bug fix', () => {
   const stale = [{ id: 'P1', test: 'app:src/mul.test.mjs', reason: 'the test file src/mul.test.mjs no longer exists at HEAD' }];
-  const { errors, warnings } = problems({}, { kind: { ...task, type: 'bugfix' }, report: { ...done, proofs: [], staleProofs: stale } });
+  const { errors, warnings } = problems({}, { kind: { ...task, type: 'bugfix' }, report: { ...built, staleProofs: stale } });
   assert.match(errors.join('\n'), /a bug fix needs the regression test's failing run/);
   assert.deepEqual(warnings, ['P1 (app:src/mul.test.mjs) is stale and not counted: the test file src/mul.test.mjs no longer exists at HEAD; run cw prove for the test as it is now']);
+});
+
+test('devReportProblems: rulesChecked equals the rules that apply to the change, naming the missing and the extra ones', () => {
+  const errorsOf = (rulesChecked, rulesApplicable) => problems({}, { report: { ...built, rulesChecked, rulesApplicable } }).errors.filter((error) => !/no commits/.test(error));
+  assert.deepEqual(errorsOf(['CORE-SCOPE', 'CORE-NAMING'], ['CORE-NAMING', 'CORE-SCOPE']), [], 'compared as a set');
+  assert.deepEqual(errorsOf([], ['CORE-SCOPE', 'CORE-NAMING']), ['rulesChecked is empty: check every rule that cw rules applicable --task t lists, then list exactly their IDs']);
+  assert.deepEqual(errorsOf(['CORE-SCOPE'], ['CORE-SCOPE', 'CORE-NAMING', 'TS-NO-CAST']), ['rulesChecked misses CORE-NAMING, TS-NO-CAST: check every rule that cw rules applicable --task t lists']);
+  assert.deepEqual(errorsOf(['CORE-SCOPE', 'REACT-A11Y'], ['CORE-SCOPE']), ['rulesChecked lists REACT-A11Y, which do not apply to this task (cw rules applicable --task t): remove them']);
+  assert.deepEqual(errorsOf([], []), [], 'a project without any rule that applies');
 });

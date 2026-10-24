@@ -13,7 +13,7 @@ import { failedError, preconditionError, usageError } from './out.mjs';
 import { resolvePacks, runPackScript, scopeScripts } from './packs.mjs';
 import { proofsAtHead, readProofs } from './prove.mjs';
 import { collectState, validateReviewInput } from './report.mjs';
-import { applicableForTask, buildRulebook } from './rules.mjs';
+import { applicableForTask, buildRulebook, rulesCheckedProblems } from './rules.mjs';
 import { loadSchema, validateWith } from './schema.mjs';
 import { parseSpec } from './spec.mjs';
 import { readRoundFile, updateTask } from './task.mjs';
@@ -244,12 +244,7 @@ export function reviewStateProblems({ config, task, input, specText, applicableI
     }
   }
 
-  const applicable = new Set(applicableIds);
-  const checked = new Set(input.rulesChecked);
-  const missing = [...applicable].filter((rule) => !checked.has(rule));
-  const extra = [...checked].filter((rule) => !applicable.has(rule));
-  if (missing.length) errors.push(`rulesChecked misses ${missing.join(', ')}: check every rule that cw rules applicable --task ${id} lists`);
-  if (extra.length) errors.push(`rulesChecked lists ${extra.join(', ')}, which do not apply to this task (cw rules applicable --task ${id}): remove them`);
+  errors.push(...rulesCheckedProblems(input.rulesChecked, applicableIds, id));
 
   const rerun = `cw checks --changed --task ${id}`;
   const { latest, current } = state.checks;
@@ -265,7 +260,7 @@ export function reviewStateProblems({ config, task, input, specText, applicableI
     if (uncovered.length || current.data.only.length) errors.push(`the checks did not cover ${uncovered.length ? uncovered.join(', ') : 'every check (--only)'}: run ${rerun}`);
   }
 
-  const testSpec = testSpecRule(applicable);
+  const testSpec = testSpecRule(applicableIds);
   const holding = proofs.filter((proof) => proof.holds);
   const testSpecFinding = input.findings.some((finding) => finding.severity === 'blocking' && finding.rule === testSpec.rule);
   if (BUG_TYPES.includes(task.type) && !holding.length && !testSpecFinding) {

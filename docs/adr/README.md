@@ -16,5 +16,6 @@ The architecture decisions D1 to D12 of the first build are in `docs/PLAN.md` §
 | [0010](0010-remklov-marketplace.md) | The remklov marketplace: local tickets by default, Jira through Atlassian's plugin, preset `default`, GitHub |
 | [0011](0011-reviewer-history-through-cw.md) | The reviewer reads history with `cw review diff\|log\|status`; no `git -C .claude/worktrees/*` allow rules |
 | [0012](0012-fresh-implementer-above-context.md) | `cw task return` starts a fresh implementer above 150k tokens of context; every report carries a handover |
+| [0013](0013-implementer-rules-check.md) | The implementer checks its change against the applicable rules; a done report lists them as `rulesChecked` |
 
 A new record takes the next number, the format of the existing ones and a line in this table.

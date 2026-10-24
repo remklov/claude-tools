@@ -476,6 +476,21 @@ export function applicableForTask(ws, task, book = buildRulebook(ws)) {
   return { task: task.id, workTree, base, files, rules: applicableRules(book, { files, areas: task.areas ?? [] }) };
 }
 
+// rulesChecked of a review or a done report against the IDs of cw rules applicable: no rule missing,
+// no extra one. Pure; one line per problem, each naming its fix.
+export function rulesCheckedProblems(checkedIds, applicableIds, taskId) {
+  const applicable = new Set(applicableIds);
+  const checked = new Set(checkedIds);
+  const missing = [...applicable].filter((rule) => !checked.has(rule));
+  const extra = [...checked].filter((rule) => !applicable.has(rule));
+  const command = `cw rules applicable --task ${taskId}`;
+  const errors = [];
+  if (missing.length && !checked.size) errors.push(`rulesChecked is empty: check every rule that ${command} lists, then list exactly their IDs`);
+  else if (missing.length) errors.push(`rulesChecked misses ${missing.join(', ')}: check every rule that ${command} lists`);
+  if (extra.length) errors.push(`rulesChecked lists ${extra.join(', ')}, which do not apply to this task (${command}): remove them`);
+  return errors;
+}
+
 // ---- lock, writing and drift ----
 
 const ruleHash = (rule) => sha(`${rule.title}\n${rule.severity}\n${rule.scope}\n${rule.protected}\n${rule.body}`);

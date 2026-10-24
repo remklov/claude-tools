@@ -34,9 +34,11 @@ Write the tests before the code: at least one per acceptance criterion, and for 
 
 Acceptance criteria are always testable. A check only a person can do (a visual detail in a browser) is not a criterion: the spec lists it under Definition of done as a manual check, it needs no test, and your report lists it as an open point with tag `manual`. A criterion you cannot test: report `blocked` with the question.
 
-### 4. Implement within scope
+### 4. Implement within scope and the rules
 
-Change only what the spec needs (CORE-SCOPE); no drive-by refactors, renames or reformatting, and report those as open points instead. Follow the procedures and the guardrails in the brief; a procedure that names a pack script runs it with `cw run <pack>:<script> --task <id>`. No dependency changes: if the task needs one, stop and report `blocked`. Then `cw step --task <id> --done 4`.
+Change only what the spec needs (CORE-SCOPE); no drive-by refactors, renames or reformatting, and report those as open points instead. Follow the procedures and the guardrails in the brief; a procedure that names a pack script runs it with `cw run <pack>:<script> --task <id>`. No dependency changes: if the task needs one, stop and report `blocked`.
+
+Then check your change against the rules, the way the reviewer will: `cw rules applicable --task <id>` prints every rule that applies to your changed files, with its full text. Go through the rules one by one against every line you added or changed (`git status` lists the files, `git diff <base commit>` shows the lines, both in the git form of `cw context`) and fix each violation now, before the checks: rule findings such as abbreviated names, casts and needless helpers are the most common reason for another review round. A rule the spec overrides on purpose (never a protected one) goes into `handover.deviations`. Your report lists the IDs of that list as `rulesChecked` (step 8). Then `cw step --task <id> --done 4`.
 
 ### 5. Checks
 
@@ -78,6 +80,7 @@ Write your report as JSON with the Write tool to a new file in the scratchpad di
   "acceptanceCriteria": [
     { "id": "AC1", "met": true, "evidence": "src/cart/cart.test.ts › adds an item (proof P1)" }
   ],
+  "rulesChecked": ["CORE-NAMING", "CORE-SCOPE", "CORE-TEST-SPEC"],
   "risks": [],
   "openPoints": [{ "text": "Check the empty cart in a browser", "tag": "manual" }],
   "handover": {
@@ -104,13 +107,14 @@ The fields (`schemas/dev-report.schema.json`):
 
 - `status`: `done`, `blocked` or `misclassified`.
 - `acceptanceCriteria`: every AC of the spec with `id` (`AC1`), `met` and `evidence` (the test and its proof, or how you verified it). `done` needs every one met.
+- `rulesChecked`: the IDs of `cw rules applicable --task <id>` you checked your change against (step 4); `done` needs exactly that set. The set grows with your changed files: for a rule `cw` names as missing, check your change against it too.
 - `risks`: strings; what could break, migration or deploy steps.
 - `openPoints`: strings or `{ "text", "tag" }` with tag `manual` (a check only a person can do), `follow-up`, `risk` or `question`.
 - `handover`: required in every report. A fresh implementer may take the task over without your context (after a review, when yours has grown large), and this is all it gets besides the spec, the findings and the list of changed files. Five lists of short notes, each at most 8 notes of at most 400 characters: `decisions` (what you chose on purpose, and why), `rejected` (approaches you dropped, and why), `testing` (the test commands and setups the work needs beyond `cw checks`), `pitfalls` (traps in the code or the tools) and `deviations` (where the work deviates from the spec or a rule, and why). A list may be empty; a `done` report fills at least one. Name files and functions instead of retelling the diff.
 - `blocked`: `{ "question", "needed" }` with status `blocked`, else `null`.
 - `misclassified`: `{ "reason", "suggested" }` (`s`, `m`, `l` or `xl`) with status `misclassified`, else `null`.
 
-`cw` adds the commits, the checks result and the proofs, and refuses a `done` report whose state does not hold (uncommitted changes, stale or failing checks, convention errors, a bug fix without a holding proof). Fix each listed point and save again. **Your final message is exactly the JSON fence `cw report save` printed, nothing else.**
+`cw` adds the commits, the checks result and the proofs, and refuses a `done` report whose state does not hold (uncommitted changes, stale or failing checks, convention errors, a bug fix without a holding proof, a `rulesChecked` that differs from `cw rules applicable`). Fix each listed point and save again. **Your final message is exactly the JSON fence `cw report save` printed, nothing else.**
 
 ## Blocked
 
@@ -124,7 +128,7 @@ Your complexity's guardrails (in the brief) set the size of the change. If the t
 
 The orchestrator may send you, by message:
 
-- review findings: fix every blocking finding and every one marked "also"; then repeat steps 5 to 8 (and 3 and 4 where tests or code change) and report again;
+- review findings: fix every blocking finding and every one marked "also"; then repeat steps 5 to 8 (and 3 and 4, with the rules check, where tests or code change) and report again;
 - the answer to your blocked question, a spec change ("read the updated brief"), the user's decision after an escalation, or a git command such as a rebase: do what it says, then the remaining steps, and report again.
 
 If the message says to run `cw ws setup` first, do that. A finding you are sure is wrong: do not ignore it silently; report `blocked` with the finding id and your evidence.

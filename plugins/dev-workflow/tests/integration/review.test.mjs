@@ -52,11 +52,12 @@ function reviewedTask(t, layout, { packs = [], packages = PACKAGES, proof = true
   assert.equal(run(workTree, ['ws', 'setup']).code, 0);
   const git = gitIn(workTree, fx.env);
   write(workTree, FIX);
+  const rulesChecked = run(workTree, ['rules', 'applicable', '--json']).json().rules.map((rule) => rule.id);
   git('add', '-A');
   git('commit', '-q', '-m', '[FEATURE] Add sum3');
   assert.equal(run(workTree, ['checks', '--changed']).code, 0);
   if (proof) assert.equal(run(workTree, ['prove', '--test', 'app:src/sum3.test.mjs', '--change', 'src/sum.mjs']).code, 0);
-  const report = run(workTree, ['report', 'save'], { input: JSON.stringify(REPORT) });
+  const report = run(workTree, ['report', 'save'], { input: JSON.stringify({ ...REPORT, rulesChecked }) });
   assert.equal(report.code, 0, report.stderr);
   updateTask(ws, id, (task) => {
     task.phase = 'review';

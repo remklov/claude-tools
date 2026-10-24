@@ -30,7 +30,7 @@ export const ROLES = {
   implementer: {
     skill: 'implementer-playbook',
     contract: { command: 'cw report save', schema: 'schemas/dev-report.schema.json' },
-    commands: ['ws setup', 'context', 'checks', 'commit msg', 'commit lint', 'prove', 'report save', 'step', 'run'],
+    commands: ['ws setup', 'context', 'rules applicable', 'checks', 'commit msg', 'commit lint', 'prove', 'report save', 'step', 'run'],
   },
   reviewer: {
     skill: 'reviewer-playbook',

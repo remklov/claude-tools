@@ -216,11 +216,11 @@ Each role gets a fixed set, shown by `cw playbook show <role> [--task <id>]` and
    - Worktree: create the task branch with `git switch -c` (D5).
 2. Read the brief (spec, ticket snapshot, packages and checks, inlined procedures, applicable rule IDs with titles, guardrails), then `cw context`. Read the code first. An ambiguous or contradicting AC → `blocked`.
 3. Tests first: one or more per AC; a regression test for bug fixes. Manual checks of the Definition of done need no test.
-4. Implement within scope (CORE-SCOPE); no dependency changes (→ `blocked`).
+4. Implement within scope (CORE-SCOPE); no dependency changes (→ `blocked`). Then check the change against every rule of `cw rules applicable --task`, as the reviewer does in R4, and fix each violation (ADR 0013).
 5. `cw checks --changed`: fix until green; never loosen checks.
 6. `git add`, `cw commit msg …` (it writes the message file in the task dir; the body comes on stdin with `--body-file -`, attribution lines with `--trailer`; the agent never writes under `.git`, a protected path whose writes are prompted and which no allow rule covers), then `git commit -F <that file>`, then `cw commit lint`. Worktree mode: plain `git` in the worktree, no `git -C` and no command substitution around git; in-place mode: `git -C <appRoot>` relative to the project root, the form `cw context` prints (D5; the Bash cwd stays at the project root, owner decision 2026-10-20).
 7. `cw prove` for each new test. A bug fix needs the regression test's failing run.
-8. `cw report save` (stdin); the final message is exactly its JSON fence.
+8. `cw report save` (stdin); a done report's `rulesChecked` equals `cw rules applicable --task` (ADR 0013); the final message is exactly its JSON fence.
 
 The complexity guardrails come from the Acme Shop generator (s/m/l/xl texts). On review findings: fix every blocking finding plus the ones flagged "also", repeat steps 5–8, and report again.
 

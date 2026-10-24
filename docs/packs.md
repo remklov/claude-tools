@@ -118,7 +118,7 @@ Every problem is collected into one error (exit 1); nothing is written then.
 | `cw rules build [--check] [--json]` | Compile and write, or check for drift |
 | `cw rules list [--json]` | The active rules: id, severity (with `protected`), scope, source (`express@5` for a variant rule), title |
 | `cw rules show <ID> [--json]` | One rule with its full text; a disabled or inactive rule exits 1 with the reason |
-| `cw rules applicable --task <id> [--json]` | The global rules plus the scoped rules that match the task's changed files (since its base, in its work tree) or its areas, with full text. The reviewer's `rulesChecked` must equal this set. |
+| `cw rules applicable --task <id> [--json]` | The global rules plus the scoped rules that match the task's changed files (since its base, in its work tree) or its areas, with full text. The reviewer's `rulesChecked` and that of a done implementer report must equal this set. |
 
 ## The v1 packs
 

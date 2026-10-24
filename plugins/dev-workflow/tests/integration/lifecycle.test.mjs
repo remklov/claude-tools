@@ -75,6 +75,7 @@ function lifecycle(fx, { orchestratorCwd, implementerCwd: implementerCwdOf, revi
   const context = ok(implementerCwd, ['context', '--task', id]);
   assert.ok(context.rules.some((rule) => rule.id === 'CORE-SCOPE'));
   write(tree, MUL);
+  const rulesChecked = ok(implementerCwd, ['rules', 'applicable', '--task', id]).rules.map((rule) => rule.id);
   ok(implementerCwd, ['checks', '--changed', '--task', id]);
   const git = gitIn(tree, fx.env);
   git('add', '-A');
@@ -83,7 +84,7 @@ function lifecycle(fx, { orchestratorCwd, implementerCwd: implementerCwdOf, revi
   ok(implementerCwd, ['commit', 'lint', '--task', id]);
   assert.equal(ok(implementerCwd, ['prove', '--task', id, '--test', 'app:src/mul.test.mjs', '--change', 'src/mul.mjs']).holds, true);
   ok(implementerCwd, ['checks', '--changed', '--task', id]);
-  const report = run(implementerCwd, ['report', 'save', '--task', id], JSON.stringify({ status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }], handover: { decisions: [], rejected: [], testing: ['cw checks --changed'], pitfalls: [], deviations: [] } }));
+  const report = run(implementerCwd, ['report', 'save', '--task', id], JSON.stringify({ status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }], rulesChecked, handover: { decisions: [], rejected: [], testing: ['cw checks --changed'], pitfalls: [], deviations: [] } }));
   assert.equal(report.code, 0, report.stderr);
   assert.match(report.stdout, /^```json\n\{\n {2}"kind": "dev-report"/);
 
@@ -101,6 +102,7 @@ function lifecycle(fx, { orchestratorCwd, implementerCwd: implementerCwdOf, revi
   ok(reviewerCwd, ['checks', '--changed', '--task', id]);
   assert.equal(ok(reviewerCwd, ['prove', '--task', id, '--recheck']).allHold, true);
   const applicable = ok(reviewerCwd, ['rules', 'applicable', '--task', id]).rules.map((rule) => rule.id);
+  assert.deepEqual(applicable, rulesChecked, 'the reviewer checks the rules the implementer checked');
   ok(reviewerCwd, ['commit', 'lint', '--task', id]);
   const verdict = { status: 'approved', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies; proof holds' }], rulesChecked: applicable, findings: [] };
   const saved = run(reviewerCwd, ['review', 'save', '--task', id], `Done.\n\`\`\`json\n${JSON.stringify(verdict)}\n\`\`\``);

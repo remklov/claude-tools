@@ -75,11 +75,13 @@ export function specified(fx, { slug = 'mul-helper', complexity = 's' } = {}) {
   return { id, branch, classified };
 }
 
-// One implementer round with the real commands: ws setup (from cwd), change, checks, commit, report.
+// One implementer round with the real commands: ws setup (from cwd), change, the rules it was checked
+// against, checks, commit, report. A done report lists the rules unless the test sets rulesChecked.
 export function implement(fx, id, { cwd, tree, files = MUL, summary = 'Add the mul helper', prove = true, report = DONE }) {
   const { ok } = harness(fx);
   ok(cwd, ['ws', 'setup', '--task', id]);
   write(tree, files);
+  const rulesChecked = ok(cwd, ['rules', 'applicable', '--task', id]).rules.map((rule) => rule.id);
   ok(cwd, ['checks', '--changed', '--task', id]);
   const git = gitIn(tree, fx.env);
   git('add', '-A');
@@ -87,7 +89,7 @@ export function implement(fx, id, { cwd, tree, files = MUL, summary = 'Add the m
   git('commit', '-q', '-F', file);
   if (prove) ok(cwd, ['prove', '--task', id, '--test', 'app:src/mul.test.mjs', '--change', 'src/mul.mjs']);
   ok(cwd, ['checks', '--changed', '--task', id]);
-  return ok(cwd, ['report', 'save', '--task', id], JSON.stringify(report));
+  return ok(cwd, ['report', 'save', '--task', id], JSON.stringify(report.status === 'done' ? { rulesChecked, ...report } : report));
 }
 
 // What cw review save leaves for the round (the reviewer area's command).

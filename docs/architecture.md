@@ -10,7 +10,7 @@ main session = orchestrator ── skill ticket (O1–O10; step files through cw
         │  cw task …, ticket context|save, spec …, classify, report show, review show, pr …
         │  Agent calls exactly as cw prints them
         ├────────▶ implementer-{s,m,l,xl}   skill implementer-playbook
-        │            cw ws setup · context · checks · commit msg/lint · prove · report save
+        │            cw ws setup · context · rules applicable · checks · commit msg/lint · prove · report save
         └────────▶ reviewer (read-only)      skill reviewer-playbook
                      cw review scope · checks · prove --recheck · rules applicable · review save
 
@@ -191,7 +191,7 @@ The ticket snapshot, the spec, a corrected PR/MR body, the report and the review
 | O3 | orchestrator | `cw task new …` (task dir, phase spec, owner session), `cw ticket save`, `cw spec save`, `cw spec lint` |
 | O4–O5 | orchestrator | `cw classify`, `cw classify --set <c> --why "…"`, `cw task confirm` if required |
 | O6 | orchestrator, hook | `cw task start` writes the brief and prints the Agent call; SubagentStart records the agent; `cw task agent --role implementer --id <agentId>` |
-| 1–8 | implementer | `cw ws setup`, `cw context`, tests, `cw checks --changed`, `cw commit msg`, `git commit -F`, `cw commit lint`, `cw prove`, `cw report save`; SubagentStop lets it end |
+| 1–8 | implementer | `cw ws setup`, `cw context`, tests, `cw rules applicable`, `cw checks --changed`, `cw commit msg`, `git commit -F`, `cw commit lint`, `cw prove`, `cw report save`; SubagentStop lets it end |
 | O7–O8 | orchestrator | `cw report show`, `cw git foreign-commits`, `cw task review` (Agent call or SendMessage), later `cw review show`; changes requested: `cw task return`, back to O7 |
 | R1–R8 | reviewer | `cw review scope`, `cw checks --changed`, `cw prove --recheck`, `cw rules applicable`, `cw commit lint`, `cw review save` |
 | O9 | orchestrator | `cw pr body` (task to deliver), `cw pr command`, AskUserQuestion, the printed push and create commands, `cw pr record --url` |

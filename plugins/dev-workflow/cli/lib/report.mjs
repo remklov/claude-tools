@@ -12,6 +12,7 @@ import { branchExists, changedFiles, currentBranch, git, headCommit, isNodeModul
 import { quote } from './host/index.mjs';
 import { failedError, preconditionError } from './out.mjs';
 import { proofsAtHead, readProofs } from './prove.mjs';
+import { applicableForTask, rulesCheckedProblems } from './rules.mjs';
 import { loadSchema, validate } from './schema.mjs';
 import { parseSpec } from './spec.mjs';
 import { updateTask } from './task.mjs';
@@ -136,8 +137,9 @@ export function collectState(ws, task) {
 }
 
 // report-<round>.json: the agent's input plus the facts cw adds. proofs are the ones that count (held,
-// not stale at HEAD); staleProofs are shown, not counted.
-export function buildDevReport({ ws, task, input, state }) {
+// not stale at HEAD); staleProofs are shown, not counted. applicableIds are the IDs of cw rules
+// applicable, which a done report's rulesChecked must equal; null for a report that is not done.
+export function buildDevReport({ ws, task, input, state, applicableIds = null }) {
   const shown = state.checks.current ?? state.checks.latest;
   const { held, stale } = proofsAtHead(state.workTree, task.base?.commit, readProofs(ws, task).proofs);
   return {
@@ -154,6 +156,8 @@ export function buildDevReport({ ws, task, input, state }) {
     commits: state.commits,
     changedFiles: state.changedFiles,
     acceptanceCriteria: input.acceptanceCriteria,
+    rulesChecked: input.rulesChecked ?? [],
+    rulesApplicable: applicableIds,
     proofs: held,
     staleProofs: stale,
     checks: shown
@@ -168,7 +172,7 @@ export function buildDevReport({ ws, task, input, state }) {
   };
 }
 
-// The rules a done report must meet beyond its own shape (§6 steps 5-8, Decided in P2).
+// The rules a done report must meet beyond its own shape (§6 steps 4-8, Decided in P2; ADR 0013).
 export function devReportProblems({ ws, task, report, state, specText }) {
   const errors = [];
   const warnings = [];
@@ -201,6 +205,8 @@ export function devReportProblems({ ws, task, report, state, specText }) {
   if (modules.length) {
     errors.push(`the commits add ${modules.join(', ')} (node_modules is never committed; a link from worktree.symlinkDirectories passes a "node_modules/" ignore pattern): ${gitForm(ws)} rm --cached ${modules.map(quote).join(' ')}, commit (step 6), then save the report again`);
   }
+  // Step 4: the change was checked against every rule that applies to it, as the reviewer will (R4).
+  errors.push(...rulesCheckedProblems(report.rulesChecked, report.rulesApplicable ?? [], id));
   const { latest, current } = state.checks;
   const rerun = `cw checks --changed --task ${id}`;
   if (!latest) errors.push(`no checks result: run ${rerun}`);
@@ -239,7 +245,9 @@ export function saveDevReport({ ws, task, input }) {
   const inputErrors = validateDevReportInput(input);
   if (inputErrors.length) throw invalid(task, inputErrors);
   const state = collectState(ws, task);
-  const report = buildDevReport({ ws, task, input, state });
+  // Only a done report is held to the rules: a blocked one may stop before there is a change.
+  const applicableIds = input.status === 'done' && state.workTree ? applicableForTask(ws, task).rules.map((rule) => rule.id) : null;
+  const report = buildDevReport({ ws, task, input, state, applicableIds });
   if (report.status === 'done') {
     const { errors, warnings } = devReportProblems({ ws, task, report, state, specText: readText(taskPath(ws, task.id, 'spec.md')) });
     if (errors.length) throw invalid(task, errors);

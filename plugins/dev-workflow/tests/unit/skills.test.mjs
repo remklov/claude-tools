@@ -81,6 +81,8 @@ const REQUIRED = {
   'implementer-playbook': {
     'ws setup': ['task'],
     context: ['task'],
+    // ADR 0013: the change is checked against every applicable rule before the checks (step 4).
+    'rules applicable': ['task'],
     checks: ['task', 'changed'],
     // PB-1: the body on stdin and attribution lines as trailers, so the agent writes nothing under .git.
     'commit msg': ['task', 'summary', 'keyword', 'body-file', 'trailer'],
