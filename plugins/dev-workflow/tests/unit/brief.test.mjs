@@ -121,3 +121,24 @@ test('the implementer brief carries the spec, packages, rules, procedures, guard
   assert.ok(reviewer.includes('- Work tree to review, read-only (absolute, for the Read tool): /p/app'), reviewer);
   assert.ok(renderBrief({ ws: worktree, task, role: 'implementer', specText: 'spec' }).includes('no `git -C`'));
 });
+
+test('a takeover brief lists the branch state and the handover, capped, and never a diff (ADR 0012)', () => {
+  const files = Array.from({ length: 83 }, (_, i) => `src/file-${String(i).padStart(2, '0')}.ts`);
+  const commits = Array.from({ length: 22 }, (_, i) => ({ sha: `${String(i).padStart(2, '0')}${'f'.repeat(38)}`, subject: `[FEATURE] Step ${i}` }));
+  const handover = { decisions: ['The version comes from package.json at build time'], rejected: [], testing: ['npm test -- version'], pitfalls: ['The route list is cached'], deviations: ['No ETag: CORE-HTTP-CACHE does not apply here'] };
+  const report = { round: 1, data: { status: 'done', handover, risks: ['Deploy order'], openPoints: [{ text: 'Check the header', tag: 'manual' }] } };
+  const brief = renderBrief({ ws: inPlace, task, role: 'implementer', specText: '## Task: x', takeover: { report, branch: { head: 'beef'.repeat(10), commits, files } }, findings: ['- [blocking · CORE-ERRORS] src/a.ts:3: Swallowed error'] });
+  for (const part of [
+    '## Taking over from an earlier implementer', 'You take APP-42/feature/version-endpoint over from an earlier implementer',
+    '- Head `beefbeefbe` · 22 commit(s) since the base `abc123`, newest first:', '  - `00ffffffff` [FEATURE] Step 0', '  - … and 2 older commit(s)',
+    '- Changed files since the base (83):', '  - src/file-79.ts', '  - … and 3 more',
+    '### Handover from the report of round 1 (done)', 'Decisions and why:', 'Test commands and setups:', 'Pitfalls:', '- No ETag: CORE-HTTP-CACHE does not apply here',
+    'Risks:\n- Deploy order', '- (manual) Check the header',
+  ]) assert.ok(brief.includes(part), part);
+  assert.ok(!brief.includes('src/file-80.ts') && !brief.includes('Step 20'), 'the lists are capped');
+  assert.ok(!brief.includes('Rejected approaches:'), 'an empty list is left out');
+  assert.ok(brief.indexOf('## Taking over') < brief.indexOf('## Review findings to fix'));
+  assert.ok(!renderBrief({ ws: inPlace, task, role: 'implementer', specText: '' }).includes('## Taking over'), 'only a fresh implementer gets it');
+  const old = renderBrief({ ws: inPlace, task, role: 'implementer', specText: '', takeover: { report: { round: 1, data: { status: 'blocked' } }, branch: null } });
+  assert.ok(old.includes('That report has no handover.') && !old.includes('### Branch state'));
+});

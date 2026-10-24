@@ -83,7 +83,7 @@ function lifecycle(fx, { orchestratorCwd, implementerCwd: implementerCwdOf, revi
   ok(implementerCwd, ['commit', 'lint', '--task', id]);
   assert.equal(ok(implementerCwd, ['prove', '--task', id, '--test', 'app:src/mul.test.mjs', '--change', 'src/mul.mjs']).holds, true);
   ok(implementerCwd, ['checks', '--changed', '--task', id]);
-  const report = run(implementerCwd, ['report', 'save', '--task', id], JSON.stringify({ status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }] }));
+  const report = run(implementerCwd, ['report', 'save', '--task', id], JSON.stringify({ status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }], handover: { decisions: [], rejected: [], testing: ['cw checks --changed'], pitfalls: [], deviations: [] } }));
   assert.equal(report.code, 0, report.stderr);
   assert.match(report.stdout, /^```json\n\{\n {2}"kind": "dev-report"/);
 

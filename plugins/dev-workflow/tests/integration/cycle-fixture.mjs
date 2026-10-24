@@ -41,9 +41,18 @@ export const STRICT_MUL = { 'src/mul.mjs': "export const mul = (a, b) => {\n  if
 export const PACKAGES = [{ id: 'app', path: '.', areas: ['backend'], checks: { test: 'node --test' }, testSingle: 'node --test {file}' }];
 export const inPlace = (t, overrides = {}) => makeInPlace(t, { config: inPlaceConfig({ packages: PACKAGES, ...overrides }) });
 
-export const DONE = { status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }] };
-export const BLOCKED = { status: 'blocked', acceptanceCriteria: [], blocked: { question: 'Integers only?', needed: 'a decision' } };
-export const misclassified = (suggested) => ({ status: 'misclassified', acceptanceCriteria: [], misclassified: { reason: 'It is bigger.', suggested } });
+// The handover every report carries (ADR 0012); the empty one fits a report that stopped early.
+export const HANDOVER = {
+  decisions: ['mul stays a plain arrow function: the spec names no input checks'],
+  rejected: ['A shared math module: out of scope'],
+  testing: ['cw checks --changed; one test: node --test src/mul.test.mjs'],
+  pitfalls: [],
+  deviations: [],
+};
+export const NO_HANDOVER = { decisions: [], rejected: [], testing: [], pitfalls: [], deviations: [] };
+export const DONE = { status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }], handover: HANDOVER };
+export const BLOCKED = { status: 'blocked', acceptanceCriteria: [], blocked: { question: 'Integers only?', needed: 'a decision' }, handover: NO_HANDOVER };
+export const misclassified = (suggested) => ({ status: 'misclassified', acceptanceCriteria: [], misclassified: { reason: 'It is bigger.', suggested }, handover: NO_HANDOVER });
 
 export function harness(fx) {
   const run = (cwd, args, input) => cw(cwd, args, { env: fx.env, input });

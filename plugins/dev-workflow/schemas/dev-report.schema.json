@@ -2,7 +2,7 @@
   "title": "Implementer report piped to cw report save (docs/PLAN.md §6 step 8); cw adds the git, checks and proof facts and saves report-<round>.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["status", "acceptanceCriteria"],
+  "required": ["status", "acceptanceCriteria", "handover"],
   "properties": {
     "status": { "enum": ["done", "blocked", "misclassified"] },
     "acceptanceCriteria": {
@@ -35,6 +35,19 @@
             }
           }
         ]
+      }
+    },
+    "handover": {
+      "description": "what a fresh implementer needs to take the task over without exploring it again (docs/adr/0012): every key is required; a list may be empty and holds at most 8 short notes",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decisions", "rejected", "testing", "pitfalls", "deviations"],
+      "properties": {
+        "decisions": { "description": "deliberate decisions and why", "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
+        "rejected": { "description": "approaches tried or considered and dropped, and why", "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
+        "testing": { "description": "the test commands and setups the work needs", "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
+        "pitfalls": { "description": "known traps in the code or the tools", "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
+        "deviations": { "description": "where the work deviates from the spec or a rule, and why", "type": "array", "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 400 } }
       }
     },
     "blocked": {

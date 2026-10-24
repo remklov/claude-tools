@@ -20,6 +20,9 @@ const lineColumn = (text, message) => {
 export const DEFAULT_TICKET_SOURCE = 'local';
 export const DEFAULT_LOCAL_TICKETS = 'docs/tickets/{key}.md';
 
+// cw task return gives the implementer a fresh agent when its context is larger (ADR 0012).
+export const DEFAULT_FRESH_IMPLEMENTER_ABOVE_TOKENS = 150_000;
+
 export function readConfigFile(path) {
   const text = readFileSync(path, 'utf8');
   try {
@@ -149,6 +152,8 @@ export function withDefaults(raw) {
       confirm: raw.workflow?.confirm ?? ['l', 'xl'],
       maxQuestionsPerRound: raw.workflow?.maxQuestionsPerRound ?? 4,
       checkTimeoutMinutes: raw.workflow?.checkTimeoutMinutes ?? 15,
+      // null (and 0) switch the rule off, so only a missing key takes the default.
+      freshImplementerAboveTokens: raw.workflow?.freshImplementerAboveTokens === undefined ? DEFAULT_FRESH_IMPLEMENTER_ABOVE_TOKENS : raw.workflow.freshImplementerAboveTokens,
     },
     guards: { ports: raw.guards?.ports ?? [], commands: raw.guards?.commands ?? [], devServer: raw.guards?.devServer ?? 'allowed' },
     complexity: { escalate: raw.complexity?.escalate ?? [] },

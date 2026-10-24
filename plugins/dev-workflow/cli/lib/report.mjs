@@ -44,9 +44,15 @@ export function parseAgentJson(text) {
 const duplicates = (values) => [...new Set(values.filter((value, i) => values.indexOf(value) !== i))];
 const schemaErrors = (name, value) => validate(loadSchema(name), value).map((error) => `${error.path}: ${error.message}`);
 
+const HANDOVER_KEYS = ['decisions', 'rejected', 'testing', 'pitfalls', 'deviations'];
+const HANDOVER_SHAPE = `{ ${HANDOVER_KEYS.map((key) => `"${key}": []`).join(', ')} }`;
+
 // The implementer's input on its own: schema plus the status rules. Pure (no fs, no git).
 export function validateDevReportInput(input) {
-  const errors = schemaErrors('dev-report', input);
+  const errors = schemaErrors('dev-report', input).map((error) =>
+    error === '$.handover: is required'
+      ? `$.handover: is required: ${HANDOVER_SHAPE}, each a list of short notes for a fresh implementer (implementer playbook, step 8)`
+      : error);
   if (errors.length) return errors;
   const dupes = duplicates(input.acceptanceCriteria.map((ac) => ac.id));
   if (dupes.length) errors.push(`acceptanceCriteria lists ${dupes.join(', ')} more than once`);
@@ -56,6 +62,9 @@ export function validateDevReportInput(input) {
     if (input.status !== key && input[key]) errors.push(`${key} must be null unless status is ${key}`);
   }
   if (input.status === 'done') {
+    if (!HANDOVER_KEYS.some((key) => input.handover[key].length)) {
+      errors.push('handover is empty: a done report names at least one decision, rejected approach, test setup, pitfall or deviation for a fresh implementer');
+    }
     for (const ac of input.acceptanceCriteria) {
       if (!ac.met) errors.push(`${ac.id} is not met; status cannot be done (report blocked with the open question instead)`);
       else if (!ac.evidence.trim()) errors.push(`${ac.id} has no evidence`);
@@ -152,6 +161,7 @@ export function buildDevReport({ ws, task, input, state }) {
       : { file: null, overall: 'missing', tree: null, current: false },
     risks: input.risks ?? [],
     openPoints: (input.openPoints ?? []).map((point) => (typeof point === 'string' ? { text: point } : point)),
+    handover: input.handover,
     blocked: input.blocked ?? null,
     misclassified: input.misclassified ?? null,
     warnings: [],

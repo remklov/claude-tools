@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import { readJson } from '../../cli/lib/fsx.mjs';
 import { loadWorkspace, taskPath } from '../../cli/lib/workspace.mjs';
 import { addAgentWorktree, cw, gitIn, makeWorktreeRepo, worktreeConfig, write } from '../fixtures/repo.mjs';
-import { BLOCKED, PACKAGES, blocking, harness, implement, inPlace, spec, specified, taskJson, writeReview } from './cycle-fixture.mjs';
+import { BLOCKED, NO_HANDOVER, PACKAGES, blocking, harness, implement, inPlace, spec, specified, taskJson, writeReview } from './cycle-fixture.mjs';
 
 test('in place: classify, start, report, review, return, a follow-up review and approval', (t) => {
   const fx = inPlace(t);
@@ -73,7 +73,7 @@ test('in place: a misclassified report classifies again; task reset refuses comm
   const { id, branch } = specified(fx);
   ok(fx.root, ['task', 'start', '--task', id]);
   ok(fx.root, ['ws', 'setup', '--task', id]);
-  ok(fx.root, ['report', 'save', '--task', id], JSON.stringify({ status: 'misclassified', acceptanceCriteria: [], misclassified: { reason: 'It needs a schema change.', suggested: 'l' } }));
+  ok(fx.root, ['report', 'save', '--task', id], JSON.stringify({ status: 'misclassified', acceptanceCriteria: [], misclassified: { reason: 'It needs a schema change.', suggested: 'l' }, handover: NO_HANDOVER }));
   assert.match(ok(fx.root, ['report', 'show', '--task', id]).next[0], /^cw classify --task .* \(it was s, the implementer suggests l\)/);
   assert.equal(run(fx.root, ['task', 'start', '--task', id]).code, 3);
 
@@ -138,7 +138,7 @@ test('worktree: isolation for the implementer; a new agent takes the branch over
   ok(fx.root, ['task', 'start', '--task', second.id]);
   const three = addAgentWorktree(fx.root, fx.env, 'three');
   ok(three, ['ws', 'setup', '--task', second.id]);
-  ok(three, ['report', 'save', '--task', second.id], JSON.stringify({ status: 'misclassified', acceptanceCriteria: [], misclassified: { reason: 'Bigger.', suggested: 'm' } }));
+  ok(three, ['report', 'save', '--task', second.id], JSON.stringify({ status: 'misclassified', acceptanceCriteria: [], misclassified: { reason: 'Bigger.', suggested: 'm' }, handover: NO_HANDOVER }));
   ok(fx.root, ['classify', '--task', second.id]);
   ok(fx.root, ['classify', '--task', second.id, '--set', 'm', '--why', 'Bigger.']);
   const reset = ok(fx.root, ['task', 'reset', '--task', second.id]);

@@ -96,7 +96,8 @@
         "maxReviewRounds": { "type": "integer", "minimum": 1, "maximum": 10 },
         "confirm": { "type": "array", "items": { "enum": ["s", "m", "l", "xl"] } },
         "maxQuestionsPerRound": { "type": "integer", "minimum": 1, "maximum": 10 },
-        "checkTimeoutMinutes": { "type": "integer", "minimum": 1, "maximum": 240 }
+        "checkTimeoutMinutes": { "type": "integer", "minimum": 1, "maximum": 240 },
+        "freshImplementerAboveTokens": { "type": ["integer", "null"], "minimum": 0 }
       }
     },
     "guards": {

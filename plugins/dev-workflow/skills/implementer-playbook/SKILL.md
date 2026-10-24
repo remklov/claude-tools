@@ -80,6 +80,13 @@ Write your report as JSON with the Write tool to a new file in the scratchpad di
   ],
   "risks": [],
   "openPoints": [{ "text": "Check the empty cart in a browser", "tag": "manual" }],
+  "handover": {
+    "decisions": ["The cart total is computed in cartTotal(), not in the view: the spec's rounding rule lives in one place"],
+    "rejected": ["A Cart class: the store keeps plain objects (src/store.ts)"],
+    "testing": ["One test: (cd web && npx vitest run src/cart/cart.test.ts)"],
+    "pitfalls": ["src/cart/fixtures.ts is shared with the checkout tests"],
+    "deviations": []
+  },
   "blocked": null,
   "misclassified": null
 }
@@ -99,6 +106,7 @@ The fields (`schemas/dev-report.schema.json`):
 - `acceptanceCriteria`: every AC of the spec with `id` (`AC1`), `met` and `evidence` (the test and its proof, or how you verified it). `done` needs every one met.
 - `risks`: strings; what could break, migration or deploy steps.
 - `openPoints`: strings or `{ "text", "tag" }` with tag `manual` (a check only a person can do), `follow-up`, `risk` or `question`.
+- `handover`: required in every report. A fresh implementer may take the task over without your context (after a review, when yours has grown large), and this is all it gets besides the spec, the findings and the list of changed files. Five lists of short notes, each at most 8 notes of at most 400 characters: `decisions` (what you chose on purpose, and why), `rejected` (approaches you dropped, and why), `testing` (the test commands and setups the work needs beyond `cw checks`), `pitfalls` (traps in the code or the tools) and `deviations` (where the work deviates from the spec or a rule, and why). A list may be empty; a `done` report fills at least one. Name files and functions instead of retelling the diff.
 - `blocked`: `{ "question", "needed" }` with status `blocked`, else `null`.
 - `misclassified`: `{ "reason", "suggested" }` (`s`, `m`, `l` or `xl`) with status `misclassified`, else `null`.
 

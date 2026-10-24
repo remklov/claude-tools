@@ -131,6 +131,8 @@ export const commands = [
         ctx.out.print(`phase ${value.phase}${value.outcome ? ` (ended: ${value.outcome})` : ''} · complexity ${value.complexity ?? '-'} · round ${value.round} · review round ${value.reviewRound}`);
         ctx.out.print(`branch ${value.branch} · base ${value.base ? `${value.base.branch}@${value.base.commit.slice(0, 10)}` : '-'} · work tree ${value.workTree ?? '-'}`);
         if (value.prUrl) ctx.out.print(`PR ${value.prUrl}`);
+        // Each fresh implementer with its reason, for example the context size (ADR 0012).
+        for (const entry of value.history.filter((item) => item.agentSwitch)) ctx.out.print(`${entry.at} ${entry.note}`);
       });
     },
   },

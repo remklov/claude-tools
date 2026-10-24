@@ -9,7 +9,7 @@
   "effort": { "level": "low" },
   "hook_event_name": "SubagentStop",
   "stop_hook_active": "{{stopHookActive}}",
-  "agent_transcript_path": "{{transcript}}.agent.jsonl",
+  "agent_transcript_path": "{{sessionDir}}/subagents/agent-{{agentId}}.jsonl",
   "last_assistant_message": "{{message}}",
   "background_tasks": []
 }
