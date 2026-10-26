@@ -4,6 +4,12 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## agents-progress 0.2.0 - 2026-10-26
+
+### Changed
+
+- Released again under a new version, with no change since 0.1.0: an install made before the 0.1.0 release (from a pre-release commit) holds an older copy under the same version 0.1.0, without the task band, and `claude plugin update` never replaces it, because Claude Code takes the version from `plugin.json`. Updating to 0.2.0 brings every install to the released code.
+
 ## dev-workflow 0.7.0 - 2026-10-25
 
 ### Changed

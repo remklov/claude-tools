@@ -1,6 +1,6 @@
 {
   "name": "agents-progress",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mod for the dev-workflow plugin: an agents pane with every subagent and its status, and a band above the prompt with each active task's phase.",
   "author": {
     "name": "Benedikt Volkmer"
