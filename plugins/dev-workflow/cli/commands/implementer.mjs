@@ -9,11 +9,11 @@ import { buildMessage, isTemplated, lintRange, normalizeFlags, normalizeKeyword 
 import { packageById } from '../lib/config.mjs';
 import { readText, writeAtomic } from '../lib/fsx.mjs';
 import { hintLines, ruleHints } from '../lib/hints.mjs';
-import { changedFiles, currentBranch, tryGit } from '../lib/git.mjs';
-import { EXIT, preconditionError, usageError } from '../lib/out.mjs';
+import { changedFiles, currentBranch, git, gitResult, tryGit } from '../lib/git.mjs';
+import { EXIT, failedError, preconditionError, usageError } from '../lib/out.mjs';
 import { resolvePacks } from '../lib/packs.mjs';
 import { applicableForTask, applicableRules, buildRulebook } from '../lib/rules.mjs';
-import { prove, recheck, singleTestTemplate } from '../lib/prove.mjs';
+import { prove, recheck, runSingleTest, singleTestTemplate } from '../lib/prove.mjs';
 import { finalLine, saveDevReport } from '../lib/report.mjs';
 import { testSpecRule } from '../lib/review.mjs';
 import { STEPS_TOTAL, isActive, markStep } from '../lib/task.mjs';
@@ -120,7 +120,8 @@ function taskHints(ctx, ws, task, workTree, base) {
 function printContext(ctx, value) {
   const { out } = ctx;
   out.print(`Task ${value.task} (${value.mode}): work tree ${value.workTree}`);
-  out.print(value.mode === 'in-place'
+  if (value.self) out.print(`Self-implementation (ADR 0019): edit files by absolute path under ${value.workTree}; run one test with cw test and commit with cw commit msg --commit; no git of your own on the task branch`);
+  else out.print(value.mode === 'in-place'
     ? `Git: ${value.git} … exactly in this form, from the project root ${value.projectRoot} (the Bash cwd stays there; never cd); file paths in it are relative to the work tree, as listed under Changed so far, or absolute`
     : 'Git: plain git … inside your worktree; no git -C and no $(…) around git');
   if (value.cwdNote) out.print(`Note: ${value.cwdNote}`);
@@ -145,6 +146,21 @@ function readBody(ctx) {
   const text = readText(file);
   if (text === null) throw usageError(`--body-file ${file} cannot be read`, 'Pass a readable file with the commit body.');
   return text;
+}
+
+// cw commit msg --commit (ADR 0019): every change of the work tree, staged and committed with the
+// message file, so the orchestrator of a self-implemented task needs no git -C of its own. A
+// node_modules link (an untracked symlink, which a "node_modules/" ignore pattern misses) stays out.
+function commitAll(workTree, file, task) {
+  if (currentBranch(workTree) !== task.branch) {
+    throw preconditionError(`${workTree} is on ${currentBranch(workTree) || 'a detached HEAD'}, not on ${task.branch}.`, `Run cw ws setup --task ${task.id} first.`);
+  }
+  git(['add', '--all', '--', '.', ':(exclude,glob)**/node_modules'], { cwd: workTree });
+  const staged = git(['diff', '--cached', '--name-only', '-z'], { cwd: workTree }).split('\0').filter(Boolean);
+  if (!staged.length) throw preconditionError(`Nothing to commit in ${workTree}.`, 'Change the files first, or leave out --commit.');
+  const result = gitResult(['commit', '--quiet', '-F', file], { cwd: workTree });
+  if (result.code !== 0) throw failedError(`git commit failed in ${workTree}: ${(result.stderr || result.stdout).trim()}`, 'Fix what the commit hook or git reports, then run cw commit msg --commit again.');
+  return { sha: git(['rev-parse', '--short=10', 'HEAD'], { cwd: workTree }), subject: git(['log', '-1', '--format=%s'], { cwd: workTree }), files: staged.length };
 }
 
 // --out is optional (default: the task dir); a file inside the work tree would be committed (Decided in P2).
@@ -206,7 +222,17 @@ export const commands = [
         changedFiles: changed,
         rules: rules.map((rule) => ({ id: rule.id, title: rule.title, severity: rule.severity, protected: rule.protected })),
         spec: existsSync(spec) ? spec : null,
-        next: [
+        self: Boolean(task.self),
+        next: task.self ? [
+          `cw test --task ${task.id} --test <package>:<file>`,
+          `cw rules applicable --task ${task.id}`,
+          `cw checks --changed --task ${task.id}`,
+          // The orchestrator commits through cw (ADR 0019): no git -C of its own.
+          `cw commit msg --task ${task.id} --summary "<Imperative summary>"${keywordFlag} --commit`,
+          `cw commit lint --task ${task.id}`,
+          `cw prove --task ${task.id} --test <package>:<file> --change <file>`,
+          `cw report save --task ${task.id} < <scratchpad>/${task.id}-report-1.json`,
+        ] : [
           `cw rules applicable --task ${task.id}`,
           `cw checks --changed --task ${task.id}`,
           // With -C <appRoot>, git reads the paths from the work tree, not from the project root.
@@ -256,11 +282,28 @@ export const commands = [
     },
   },
   {
+    path: ['test'],
+    group: 'implementer',
+    usage: 'cw test --task <id> --test <package>:<file>[::<test name>]',
+    summary: "Run one test in the task's work tree with the package's single-test command, from any cwd",
+    flags: { task: 'string', test: 'string' },
+    async run(ctx) {
+      const { ws, task } = activeTask(ctx);
+      const test = requireFlag(ctx.flags, 'test', 'Pass --test <package>:<file>[::<test name>].');
+      const result = await runSingleTest({ ws, task, test });
+      emit(ctx, result, (value) => {
+        ctx.out.print(`${value.test}: ${value.passed ? 'pass' : `fail (exit ${value.exit}${value.timedOut ? ', timed out' : ''})`} · ${value.command} in ${value.cwd}`);
+        if (!value.passed) ctx.out.print(value.tail);
+      });
+      return result.passed ? EXIT.ok : EXIT.failed;
+    },
+  },
+  {
     path: ['commit', 'msg'],
     group: 'implementer',
-    usage: 'cw commit msg --task <id> --summary <text> [--keyword <FEATURE|BUGFIX|TASK|DOCS>] [--flag <!!!|SECURITY>] [--body-file <file>|-] [--trailer "<Key: value>"]… [--out <file>]',
-    summary: 'Write the commit message of the git preset to a file for git commit -F (body from a file or stdin, trailers last)',
-    flags: { task: 'string', summary: 'string', keyword: 'string', flag: 'list', 'body-file': 'string', trailer: 'list', out: 'string' },
+    usage: 'cw commit msg --task <id> --summary <text> [--keyword <FEATURE|BUGFIX|TASK|DOCS>] [--flag <!!!|SECURITY>] [--body-file <file>|-] [--trailer "<Key: value>"]… [--out <file>] [--commit]',
+    summary: 'Write the commit message of the git preset to a file for git commit -F (body from a file or stdin, trailers last); --commit also stages every change of the work tree and commits it',
+    flags: { task: 'string', summary: 'string', keyword: 'string', flag: 'list', 'body-file': 'string', trailer: 'list', out: 'string', commit: 'boolean' },
     run(ctx) {
       const { ws, task } = activeTask(ctx);
       const preset = ws.config.git.conventions;
@@ -283,8 +326,15 @@ export const commands = [
       const file = messageFile(ctx, ws, task, workTree);
       const { message, warnings } = buildMessage(preset, { ticket: task.ticket, noTicket: isNoTicket(ws.config, task.ticket), summary, keyword, flags, body, trailers });
       writeAtomic(file, message);
-      const next = `${gitForm(ws)} commit -F ${quote(file)}`;
       for (const warning of warnings) ctx.out.warn(warning);
+      if (ctx.flags.commit) {
+        const commit = commitAll(workTree, file, task);
+        return emit(ctx, { file, message, warnings, commit, next: `cw commit lint --task ${task.id}` }, (value) => {
+          ctx.out.print(`committed ${value.commit.sha} ${value.commit.subject} on ${task.branch} (${value.commit.files} file(s))`);
+          ctx.out.print(`Next: ${value.next}`);
+        });
+      }
+      const next = `${gitForm(ws)} commit -F ${quote(file)}`;
       emit(ctx, { file, message, warnings, next }, (value) => {
         ctx.out.print(`wrote ${value.file}`);
         ctx.out.print(`Run: ${value.next} (attribution lines your instructions require go in with --trailer; never edit the file)`);

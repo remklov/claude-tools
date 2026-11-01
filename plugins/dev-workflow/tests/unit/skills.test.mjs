@@ -62,6 +62,9 @@ const REQUIRED = {
     'task confirm': ['task', 'note'],
     'task start': ['task', 'new-agent'],
     'task agent': ['task', 'role', 'id'],
+    // ADR 0019: the orchestrator's own implementation of a small task.
+    test: ['task', 'test'],
+    'commit msg': ['task', 'summary', 'keyword', 'commit'],
     'report show': ['task'],
     'task reset': ['task', 'keep', 'note'],
     'git foreign-commits': ['task'],
@@ -83,6 +86,7 @@ const REQUIRED = {
   'implementer-playbook': {
     'ws setup': ['task'],
     context: ['task'],
+    test: ['task', 'test'],
     // ADR 0013: the change is checked against every applicable rule before the checks (step 4).
     'rules applicable': ['task'],
     checks: ['task', 'changed'],
@@ -320,6 +324,7 @@ const PLACEHOLDERS = {
   '<commit>': 'HEAD',
   '<commit>:<file>': 'HEAD:src/sum.mjs',
   '<F>': 'F1',
+  '<package>:<file>': 'app:src/sum.test.mjs',
   '<scratchpad>/<id>-what-1.md': 'what-1.md',
 };
 const PLACEHOLDER = /<[^<>\s]+>/;

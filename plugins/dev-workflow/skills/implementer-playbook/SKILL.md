@@ -42,7 +42,7 @@ Then check your change against the rules, the way the reviewer will: `cw rules a
 
 ### 5. Checks
 
-`cw checks --changed --task <id>` runs the checks of every package with changed files in the work tree. Fix the failures and run it again until it passes. Never loosen a check: no skipped or focused tests, no disabled lint rules, no changed thresholds or check configs. To iterate on one test, run the single-test command `cw context` prints in a subshell in the package directory, then finish with `cw checks --changed --task <id>`. A `no-package` result: report `blocked` (the orchestrator adds the package).
+`cw checks --changed --task <id>` runs the checks of every package with changed files in the work tree. Fix the failures and run it again until it passes. Never loosen a check: no skipped or focused tests, no disabled lint rules, no changed thresholds or check configs. To iterate on one test, run `cw test --task <id> --test <package>:<file>` (it runs the package's single-test command in the work tree, no `cd` needed), then finish with `cw checks --changed --task <id>`. A `no-package` result: report `blocked` (the orchestrator adds the package).
 
 After the results `cw checks` prints rule hints from your diff (ADR 0017): a hunk that changes only whitespace (CORE-SCOPE), a declared name with an abbreviation outside the allowed list or a boolean without `is`, `has`, `can` or `should` (CORE-NAMING), a new module-private helper with fewer than three references (CORE-SIMPLICITY). They are what review rounds were returned for. Check each against its rule and fix the ones that break it; a hint that does not apply needs nothing.
 

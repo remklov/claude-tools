@@ -44,7 +44,7 @@ The main session becomes the orchestrator of one task until `cw task end`. Its g
 | O3 Spec | Task, ticket snapshot, spec with Risks and deploy steps, lint | `task new`, `ticket save`, `spec save`, `spec lint` |
 | O4 Classify | Packages, areas, minimum; the chosen level with a reason | `classify`, `classify --set --why [--override]` |
 | O5 Confirm | For the levels in `workflow.confirm` | `task confirm --note` |
-| O6 Delegate | The implementer Agent call; SubagentStart records its id (`task agent` only when a command says it recorded none) | `task start` |
+| O6 Delegate | The implementer Agent call; SubagentStart records its id (`task agent` only when a command says it recorded none). A complexity in `workflow.selfImplement` (default `s`): the orchestrator implements it itself in the task's work tree, and the reviewer stays an agent ([ADR 0019](adr/0019-orchestrator-implements-small-tasks.md)) | `task start [--agent]`, then for itself `ws setup`, `test`, `checks`, `commit msg --commit`, `prove`, `report save` |
 | O7 Report | One call: a done report is shown, foreign commits are checked, the review starts → O8; blocked → answer; misclassified → reclassify and reset | `task review`, `report show`, `classify`, `task reset [--keep --note]`, `task start --new-agent` |
 | O8 Review loop | Review rounds; the user decides on the marked findings ([ADR 0015](adr/0015-user-decides-review-findings.md)); findings back, escalation | `review show`, `review decide --finding --as --note`, `task return [--spec-changed \| --continue] [--new-agent]` |
 | O9 Deliver | Body around the orchestrator's summary, commands, confirmation, push and PR/MR, record | `pr body --what <file> [--stdin]`, `pr command`, `pr title`, `pr record --url \| --skipped` |
@@ -60,7 +60,7 @@ The misclassified reset (`cw task reset`) removes an implementer's empty start (
 |---|---|---|
 | 1 | Create or switch to the task branch; a refusal is reported as blocked | `ws setup` |
 | 2 | Read the brief, then the context (work tree, git form, packages, rules) and the code | `context`, `rules show` |
-| 3 | Tests first: at least one per acceptance criterion, a regression test for a bug fix; manual checks need none | `step --done 3` |
+| 3 | Tests first: at least one per acceptance criterion, a regression test for a bug fix; manual checks need none | `test --test`, `step --done 3` |
 | 4 | Implement within scope; no dependency changes; then check the change against every applicable rule, as the reviewer does in R4, and fix each violation | `rules applicable`, `step --done 4` |
 | 5 | Checks of every changed package until they pass; never loosen a check; check each rule hint ([ADR 0017](adr/0017-rule-hints.md)) against its rule | `checks --changed` |
 | 6 | Stage, message file (body on stdin, attribution lines as trailers), `git commit -F` in the printed git form, convention check | `commit msg [--body-file -] [--trailer]`, `commit lint` |

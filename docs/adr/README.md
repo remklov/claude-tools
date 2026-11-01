@@ -22,5 +22,6 @@ The architecture decisions D1 to D12 of the first build are in `docs/PLAN.md` §
 | [0016](0016-intake-checks.md) | The intake checks of a kickoff plan: comments, links and earlier work on the key, Risks and deploy steps, the ticket in the review |
 | [0017](0017-rule-hints.md) | `cw checks` prints rule hints from the diff |
 | [0018](0018-verify-unchanged-state-once.md) | The review verifies an unchanged state once: `cw checks` reuses a passing run of the same content, `cw prove --recheck` a proof of the same commit (`--fresh` runs again) |
+| [0019](0019-orchestrator-implements-small-tasks.md) | The orchestrator implements the complexities of `workflow.selfImplement` (default `s`) itself; the reviewer stays an agent |
 
 A new record takes the next number, the format of the existing ones and a line in this table.

@@ -11,7 +11,7 @@ cw task start --task <id>
 - `--base <branch>` only when the user wants another base than `git.defaultBase`; it must be a local branch of the work repo.
 - Refusals name their fix: a spec with lint errors, a missing confirmation, a pending reset after a misclassification, or (in-place) another task that holds the app's work tree. Ask the user where the fix needs a decision.
 
-The output contains the brief file, the selected rules and procedures, and:
+For a complexity in `workflow.selfImplement` (default `s`) the output says "You implement this task yourself" and prints no Agent call: continue with `cw playbook read steps/o6-self.md`. Otherwise it contains the brief file, the selected rules and procedures, and:
 
 ```text
 Call the Agent tool with exactly these parameters:

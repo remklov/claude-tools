@@ -148,7 +148,7 @@ test('worktree: isolation for the implementer; a new agent takes the branch over
 });
 
 test('maximum review rounds escalate; --continue and a spec change after approval restart the cycle', (t) => {
-  const fx = inPlace(t, { workflow: { maxReviewRounds: 1 } });
+  const fx = inPlace(t, { workflow: { maxReviewRounds: 1, selfImplement: [] } });
   const { run, ok } = harness(fx);
   const app = gitIn(fx.app, fx.env);
   const { id, branch } = specified(fx);

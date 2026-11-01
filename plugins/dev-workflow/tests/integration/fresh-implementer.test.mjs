@@ -28,7 +28,7 @@ function toReturn(fx) {
   return { id, branch };
 }
 
-const withLimit = (t, limit) => inPlace(t, { workflow: { freshImplementerAboveTokens: limit } });
+const withLimit = (t, limit) => inPlace(t, { workflow: { freshImplementerAboveTokens: limit, selfImplement: [] } });
 
 test('in place: above the threshold task return prints a fresh Agent call with the takeover brief, records the switch, and the new agent continues', (t) => {
   const fx = inPlace(t);

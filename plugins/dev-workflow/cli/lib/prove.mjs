@@ -75,6 +75,16 @@ function singleCommand(ws, target) {
   return singleTestCommand(runner.template, { file: target.testFile, name: target.name });
 }
 
+// One test in the task's work tree, through the package's single-test command (cw test): no cd, so the
+// orchestrator of a self-implemented task and an agent run it the same way (ADR 0019).
+export async function runSingleTest({ ws, task, test, timeoutMs }) {
+  const workTree = requireWorkTree(ws, task);
+  const target = parseTestSpec(ws.config, test);
+  const command = singleCommand(ws, target);
+  const run = await runTest(join(workTree, target.pkg.path), command, target.pkg, timeoutMs ?? ws.config.workflow.checkTimeoutMinutes * 60_000, secretValues(ws.config));
+  return { task: task.id, test: `${target.pkg.id}:${target.testPath}${target.name ? `::${target.name}` : ''}`, command, cwd: target.pkg.path, ...run, passed: run.exit === 0 };
+}
+
 // --change values as work-tree-relative paths; relative values are relative to the work tree.
 export function normalizeChange(workTree, values) {
   const real = (path) => {
