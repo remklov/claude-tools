@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { fence } from '../../cli/lib/report.mjs';
+import { fence, finalLine } from '../../cli/lib/report.mjs';
 import { hookInput, runHookScript } from '../fixtures/hooks/index.mjs';
 import { addAgentWorktree, cw, makeWorktreeRepo, tempBase, write } from '../fixtures/repo.mjs';
 import { BLOCKED, DONE, harness, implement, inPlace, specified, taskJson, writeReview } from './cycle-fixture.mjs';
@@ -122,7 +122,7 @@ test('SubagentStart records a fresh reviewer of the same round, and the stop che
   const stop = (agentId, session) => hook(fx, 'subagent-stop', 'subagent-stop', { agentId, agentType: REVIEWER, message: 'Looks good.', ...(session ? { session } : {}) });
   const held = stop('agent-r2').json();
   assert.equal(held.decision, 'block');
-  assert.match(held.reason, new RegExp(`\\(1/2\\): there is no review-1\\.json for round 1 yet\\. .*pipe its JSON to \`cw review save --task ${id}\`.*end your turn with exactly the JSON fence it prints\\.$`));
+  assert.match(held.reason, new RegExp(`\\(1/2\\): there is no review-1\\.json for round 1 yet\\. .*pipe its JSON to \`cw review save --task ${id}\`.*end your turn with exactly the line it prints last\\.$`));
   silent(stop('agent-r1'), 'the replaced reviewer is no longer the task\'s');
 
   // After a rebind the reviewer of the earlier session is stale: cw task review prints a fresh Agent
@@ -179,12 +179,13 @@ test('SubagentStop holds the implementer until the report is saved, cross-checks
   const missing = stop('I am done.');
   assert.equal(missing.code, 0, missing.stderr);
   assert.equal(missing.json().decision, 'block');
-  assert.match(missing.json().reason, /^dev-workflow stop check \(1\/2\): there is no report-1\.json for round 1 yet\. .*pipe its JSON to `cw report save --task NO-TICKET__feature__mul-helper`.*JSON fence it prints\.$/);
+  assert.match(missing.json().reason, /^dev-workflow stop check \(1\/2\): there is no report-1\.json for round 1 yet\. .*pipe its JSON to `cw report save --task NO-TICKET__feature__mul-helper`.*line it prints last\.$/);
   assert.deepEqual(taskJson(fx, id).stopBlocks, { 'agent-1': 1 });
 
   implement(fx, id, { cwd: fx.root, tree: fx.app });
   const report = JSON.parse(readFileSync(join(fx.root, '.git', 'dev-workflow', 'tasks', id, 'report-1.json'), 'utf8'));
-  silent(stop(fence(report)), 'a saved, valid, fresh report with the same status');
+  silent(stop(finalLine(report)), 'the final line of a saved, valid, fresh report (ADR 0014)');
+  silent(stop(fence(report)), 'a JSON fence of an earlier playbook with the same status');
   silent(stop(undefined), 'the Desktop app sends no last_assistant_message');
 
   const mismatch = stop(fence({ ...report, status: 'blocked' }));

@@ -23,6 +23,9 @@ The API has no version route. Routes live in \`src/routes/index.ts\`.
 ### Non-goals
 - No changelog endpoint.
 
+### Risks and deploy steps
+- None.
+
 ### Definition of done
 - Checks pass.
 `;
@@ -33,7 +36,19 @@ test('the template parses, keeps the header and fails only on its placeholders',
   const text = specTemplate(task);
   const spec = parseSpec(text);
   assert.deepEqual(spec.header, { ticket: 'APP-42', type: 'feature', branch: 'APP-42/feature/version-endpoint' });
-  assert.deepEqual(errorsOf(text), ['R1 is still a placeholder', 'AC1 is still a placeholder', 'the Context placeholder is still in the spec']);
+  assert.deepEqual(errorsOf(text), [
+    'the Risks and deploy steps placeholder is still in the spec: name the fallout, or write None',
+    'R1 is still a placeholder',
+    'AC1 is still a placeholder',
+    'the Context placeholder is still in the spec',
+  ]);
+});
+
+test('a spec without Risks and deploy steps passes with a warning; its lines feed the PR/MR', () => {
+  const without = lintSpec(good.replace(/### Risks and deploy steps\n- None\.\n\n/, ''), { task, isKnownPath: () => true });
+  assert.deepEqual(without.errors, [], 'a spec saved before the section existed still passes');
+  assert.match(without.warnings.join('\n'), /no "### Risks and deploy steps" section: name the configuration per environment \(production included\)/);
+  assert.equal(parseSpec(good).body('Risks and deploy steps'), '- None.');
 });
 
 test('a complete spec is clean and yields its paths and keyword text', () => {

@@ -42,7 +42,9 @@ Then check your change against the rules, the way the reviewer will: `cw rules a
 
 ### 5. Checks
 
-`cw checks --changed --task <id>` runs the checks of every package with changed files in the work tree. Fix the failures and run it again until it passes. Never loosen a check: no skipped or focused tests, no disabled lint rules, no changed thresholds or check configs. To iterate on one test, run the single-test command `cw context` prints in a subshell in the package directory, then finish with `cw checks --changed --task <id>`. A `no-package` result: report `blocked` (the orchestrator adds the package).
+`cw checks --changed --task <id>` runs the checks of every package with changed files in the work tree. Fix the failures and run it again until it passes. Never loosen a check: no skipped or focused tests, no disabled lint rules, no changed thresholds or check configs. To iterate on one test, run `cw test --task <id> --test <package>:<file>` (it runs the package's single-test command in the work tree, no `cd` needed), then finish with `cw checks --changed --task <id>`. A `no-package` result: report `blocked` (the orchestrator adds the package).
+
+After the results `cw checks` prints rule hints from your diff (ADR 0017): a hunk that changes only whitespace (CORE-SCOPE), a declared name with an abbreviation outside the allowed list or a boolean without `is`, `has`, `can` or `should` (CORE-NAMING), a new module-private helper with fewer than three references (CORE-SIMPLICITY). They are what review rounds were returned for. Check each against its rule and fix the ones that break it; a hint that does not apply needs nothing.
 
 ### 6. Commit
 
@@ -114,11 +116,11 @@ The fields (`schemas/dev-report.schema.json`):
 - `blocked`: `{ "question", "needed" }` with status `blocked`, else `null`.
 - `misclassified`: `{ "reason", "suggested" }` (`s`, `m`, `l` or `xl`) with status `misclassified`, else `null`.
 
-`cw` adds the commits, the checks result and the proofs, and refuses a `done` report whose state does not hold (uncommitted changes, stale or failing checks, convention errors, a bug fix without a holding proof, a `rulesChecked` that differs from `cw rules applicable`). Fix each listed point and save again. **Your final message is exactly the JSON fence `cw report save` printed, nothing else.**
+`cw` adds the commits, the checks result and the proofs, and refuses a `done` report whose state does not hold (uncommitted changes, stale or failing checks, convention errors, a bug fix without a holding proof, a `rulesChecked` that differs from `cw rules applicable`). Fix each listed point and save again. **Your final message is exactly the line `cw report save` printed last (`dev-workflow report <id> round <n>: <status>`), nothing else**: the orchestrator reads the saved report with `cw`.
 
 ## Blocked
 
-Report `blocked` when you cannot go on without a decision: an ambiguous or contradicting acceptance criterion, a needed dependency, a refused `cw ws setup`, a check that belongs to no package, a spec that would break a protected rule. Put the precise question and what you need into `blocked`, list the criteria met so far, save, and end with the fence. The orchestrator answers by message: continue where you stopped, and save a new report at the end (an old one does not count).
+Report `blocked` when you cannot go on without a decision: an ambiguous or contradicting acceptance criterion, a needed dependency, a refused `cw ws setup`, a check that belongs to no package, a spec that would break a protected rule. Put the precise question and what you need into `blocked`, list the criteria met so far, save, and end with the line it prints last. The orchestrator answers by message: continue where you stopped, and save a new report at the end (an old one does not count).
 
 ## Misclassified
 
@@ -135,7 +137,7 @@ If the message says to run `cw ws setup` first, do that. A finding you are sure 
 
 ## The stop check
 
-When you end your turn, a hook checks this round's report. Until `cw report save --task <id>` has succeeded after your current turn began, it holds you (at most twice) with the reason and the command to run: save, fix what it reports, and end with the printed fence. After every message from the orchestrator (an answer, findings, a rebase), the report you saved before no longer counts: save a new one before you end.
+When you end your turn, a hook checks this round's report. Until `cw report save --task <id>` has succeeded after your current turn began, it holds you (at most twice) with the reason and the command to run: save, fix what it reports, and end with the line it prints last. After every message from the orchestrator (an answer, findings, a rebase), the report you saved before no longer counts: save a new one before you end.
 
 ## Never
 

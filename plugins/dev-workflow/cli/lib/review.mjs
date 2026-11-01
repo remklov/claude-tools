@@ -7,7 +7,8 @@ import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
 import { packagesOf } from './config.mjs';
 import { foreignCommits } from './commit.mjs';
-import { readText, writeJson } from './fsx.mjs';
+import { inheritedDecisions } from './decisions.mjs';
+import { readJson, readText, writeJson } from './fsx.mjs';
 import { currentBranch, git, gitResult, isNodeModulesPath, statusEntries } from './git.mjs';
 import { failedError, preconditionError, usageError } from './out.mjs';
 import { resolvePacks, runPackScript, scopeScripts } from './packs.mjs';
@@ -312,6 +313,28 @@ export function validateSavedReview(saved) {
   return validateReviewInput(Object.fromEntries(keys.map((key) => [key, saved[key]])));
 }
 
+// The review before the current round's: the approval a re-review round started from
+// (review-<round>-r<n>.json), else the newest review of an earlier implementer round; null for none.
+export function previousReview(ws, task) {
+  const archived = taskPath(ws, task.id, `review-${task.round}-r${task.reviewRound - 1}.json`);
+  if (existsSync(archived)) return readJson(archived);
+  for (let round = task.round - 1; round >= 1; round -= 1) {
+    const file = readRoundFile(ws, task, 'review', round);
+    if (file.data) return file.data;
+  }
+  return null;
+}
+
+// carriedFrom names a finding of the previous review, so its decision can follow it.
+function carriedProblems(findings, previous) {
+  const known = (previous?.findings ?? []).map((finding) => finding.id);
+  return findings.filter((finding) => finding.carriedFrom).flatMap((finding) => {
+    if (!previous) return [`${finding.id}: carriedFrom ${finding.carriedFrom}, but there is no earlier review to carry a finding over from: remove carriedFrom`];
+    if (!known.includes(finding.carriedFrom)) return [`${finding.id}: carriedFrom ${finding.carriedFrom} is not a finding of your previous review (${known.join(', ') || 'it has none'})`];
+    return [];
+  });
+}
+
 const invalid = (task, errors) =>
   failedError(`The review is not valid:\n- ${errors.join('\n- ')}`, `Fix each point, then pipe the review to cw review save --task ${task.id} again.`, { errors });
 
@@ -330,8 +353,10 @@ export function saveReview({ ws, task, input }) {
   const reportSavedAt = readRoundFile(ws, task, 'report').data?.savedAt ?? null;
   // The scripts take a while: only an approval needs them.
   const content = input.status === 'approved' && state.onBranch ? contentProblems(ws, task, state.workTree) : null;
+  const previous = previousReview(ws, task);
   const errors = [
     ...inputErrors,
+    ...carriedProblems(input.findings, previous),
     ...reviewStateProblems({
       config: ws.config,
       task,
@@ -373,6 +398,9 @@ export function saveReview({ ws, task, input }) {
     }
     review.savedAt = new Date().toISOString();
     writeJson(path, review);
+    // A saved review starts its decisions afresh; carried-over findings keep the user's earlier answer.
+    const others = (fresh.decisions ?? []).filter((decision) => !(decision.review === review.round && decision.reviewRound === review.reviewRound));
+    fresh.decisions = [...others, ...inheritedDecisions(fresh, previous, review, review.findings, review.savedAt)];
   });
   return { path, review };
 }

@@ -2,38 +2,33 @@
 
 Goal: an approved review at the branch tip, or an escalation to the user.
 
-## 1. Foreign commits
+## 1. The review round
 
-```bash
-cw git foreign-commits --task <id>
-```
+`cw task review --task <id>` (O7) started it: the first round prints the Agent call for `dev-workflow:reviewer` (pass it exactly, O6 rules), later rounds a SendMessage to the same reviewer with exactly the text to send. A reviewer that is gone: `cw task review --task <id> --new-agent` prints a fresh Agent call. Wait for the reviewer.
 
-Exit 1 means the task branch holds commits that are not this task's, or the work tree left the branch. The `Fix:` names a git command for the implementer (a rebase or a switch). SendMessage the same implementer: run exactly that command, then `cw checks --changed --task <id>`, and save the report again with `cw report save --task <id>`. Wait, run `cw report show --task <id>`, then this check again. Interleaved foreign commits: ask the user. An implementer of an earlier session gets no SendMessage; follow the `Fix:` (the review turns it into a blocking finding).
-
-## 2. Start the review round
-
-```bash
-cw task review --task <id>
-```
-
-- First round: it prints the Agent call for `dev-workflow:reviewer`. Pass it exactly (O6 rules), then `cw task agent --task <id> --role reviewer --id <agentId>`.
-- Later rounds: it prints a SendMessage to the same reviewer with exactly the text to send. Send it unchanged and wait for the answer.
-- A reviewer that is gone: `cw task review --task <id> --new-agent` prints a fresh Agent call.
-
-## 3. Read the review
+## 2. Read the review
 
 ```bash
 cw review show --task <id>
 ```
 
-- **approved:** continue with O9. Non-blocking findings that stay open go into the PR/MR's open points.
+It marks the findings the user decides on (ADR 0015): `needs the user's decision` stands at every finding the reviewer set `decision` on and at every non-blocking `correctness` or `security` finding. No defect goes into the PR/MR unseen, and the answer reaches the implementer in this round.
+
+- **Marked findings:** one AskUserQuestion with one question per finding (at most `workflow.maxQuestionsPerRound`, more in a second round): the finding in plain words with its file, and the options "Fix it in this task", "A ticket for later" and "Accept it as it is", the reviewer's recommendation first. Record each answer:
+
+  ```bash
+  cw review decide --task <id> --finding F2 --as fix --note "<the user's answer>"
+  ```
+
+  An answer that changes the spec (a routing decision, a sharper criterion): save the spec now, `cw spec save --task <id>` and `cw spec lint --task <id>`; the returned round works from it. `cw task return` and every `pr` command refuse while a marked finding has no decision.
+- **approved:** without a fix decision continue with O9; the accepted findings and the ones left for a ticket go into the PR/MR's open points. With a fix decision: `cw task return --task <id>` sends those findings back, and the round goes on as below.
 - **changes_requested:** send the findings back:
 
   ```bash
   cw task return --task <id>
   ```
 
-  It prints a SendMessage to the same implementer with the blocking findings and the ones marked "also" (`sendAlong`), or a fresh Agent call when that implementer is gone (`--new-agent`), belongs to an earlier session, or its context is larger than `workflow.freshImplementerAboveTokens` (default 150000 tokens). The fresh agent's brief carries the spec, the handover of the last report, the findings and the branch state, so it needs nothing from the old one. Do exactly what is printed: a SendMessage unchanged, or the Agent call followed by `cw task agent --task <id> --role implementer --id <agentId>`. Tell the user the one-line reason `cw` prints (`A fresh implementer: …`, or that the context size is unknown). Wait, then back to O7 (`cw report show --task <id>`) and from there to this step.
+  It prints a SendMessage to the same implementer with the blocking findings, the ones the user decided to fix and the ones marked "also" (`sendAlong`), or a fresh Agent call when that implementer is gone (`--new-agent`), belongs to an earlier session, or its context is larger than `workflow.freshImplementerAboveTokens` (default 150000 tokens). The fresh agent's brief carries the spec, the handover of the last report, the findings and the branch state, so it needs nothing from the old one. Do exactly what is printed. Tell the user the one-line reason `cw` prints (`A fresh implementer: …`, or that the context size is unknown). Wait, then `cw task review --task <id>` (O7).
 - **escalated:** the last allowed round (`workflow.maxReviewRounds`) still requests changes. Show the user the open blocking findings and ask: continue with their decision, or stop.
   - Continue: `cw task return --task <id> --continue --note "<the user's decision>"`; the decision reaches the implementer.
   - Stop: `cw task end --task <id> --outcome escalated --note "<why>"`, then `cw task cleanup --task <id>` and the short report.

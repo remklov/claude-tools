@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync,
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { readJson } from '../../cli/lib/fsx.mjs';
+import { readJson, writeJson } from '../../cli/lib/fsx.mjs';
 import { validateSavedReview } from '../../cli/lib/review.mjs';
 import { createTask, newTask, readTask, updateTask } from '../../cli/lib/task.mjs';
 import { loadWorkspace, taskPath } from '../../cli/lib/workspace.mjs';
@@ -132,7 +132,7 @@ for (const layout of ['in-place', 'worktree']) {
 
     const saved = s.run(join(outside, '.claude'), ['review', 'save'], { input: `My review:\n\`\`\`json\n${JSON.stringify(approval(rules))}\n\`\`\`\n` });
     assert.equal(saved.code, 0, saved.stderr);
-    assert.match(saved.stdout, /^```json\n[\s\S]*\n```\n$/);
+    assert.match(saved.stdout, /^Saved \S+review-1\.json: approved · \d+ finding\(s\), 0 blocking\nEnd your turn with exactly this line:\ndev-workflow review \S+ round 1\.1: approved\n$/);
     const review = readJson(taskPath(s.ws, s.id, 'review-1.json'));
     assert.deepEqual(Object.keys(review), [
       'kind', 'version', 'task', 'round', 'reviewRound', 'savedAt', 'status', 'acceptanceCriteria', 'rulesChecked', 'findings', 'summary',
@@ -317,3 +317,32 @@ for (const layout of ['in-place', 'worktree']) {
     assert.equal(read(['status', '--', 'src']).code, 2, 'status takes no paths');
   });
 }
+
+test('carriedFrom names a finding of the previous review, and the user\'s decision on it follows it (ADR 0015)', (t) => {
+  const s = reviewedTask(t, 'in-place', { proof: false });
+  const rules = rulesOf(s);
+  const save = (review) => s.run(s.fx.root, ['review', 'save', '--json'], { input: JSON.stringify(review) });
+  const finding = { id: 'F1', severity: 'non_blocking', rule: 'correctness', file: 'src/sum.mjs', line: 1, issue: 'sum3 overflows above 2^53.' };
+  const blocker = { id: 'F2', severity: 'blocking', rule: 'CORE-SCOPE', file: 'src/sum.mjs', issue: 'A reformatted line.' };
+  const requested = (findings) => ({ ...approval(rules), status: 'changes_requested', findings });
+
+  const orphan = save(requested([{ ...finding, carriedFrom: 'F1' }, blocker]));
+  assert.equal(orphan.code, 1);
+  assert.match(orphan.json().details.errors.join('\n'), /F1: carriedFrom F1, but there is no earlier review to carry a finding over from: remove carriedFrom/);
+  const unasked = save(requested([{ ...finding, decision: true }, blocker]));
+  assert.match(unasked.json().details.errors.join('\n'), /F1: a finding for the user's decision names your recommendation in suggestion/);
+
+  // Round 1 as saved, with the user's decision on F1; the task is in round 2's review.
+  writeJson(taskPath(s.ws, s.id, 'review-1.json'), { kind: 'review', version: 1, task: s.id, round: 1, reviewRound: 1, savedAt: new Date().toISOString(), status: 'changes_requested', findings: [finding, blocker] });
+  updateTask(s.ws, s.id, (task) => {
+    task.round = 2;
+    task.reviewRound = 2;
+    task.decisions = [{ review: 1, reviewRound: 1, finding: 'F1', severity: 'non_blocking', rule: 'correctness', file: 'src/sum.mjs', line: 1, issue: finding.issue, as: 'accept', note: 'Sums stay small', at: new Date().toISOString(), inheritedFrom: null }];
+  });
+  const unknown = save(requested([{ ...finding, id: 'F1', carriedFrom: 'F7' }, blocker]));
+  assert.match(unknown.json().details.errors.join('\n'), /F1: carriedFrom F7 is not a finding of your previous review \(F1, F2\)/);
+  const saved = save(requested([{ ...blocker, id: 'F1' }, { ...finding, id: 'F2', carriedFrom: 'F1' }]));
+  assert.equal(saved.code, 0, saved.stderr);
+  const inherited = readTask(s.ws, s.id).decisions.find((decision) => decision.review === 2);
+  assert.deepEqual([inherited.finding, inherited.as, inherited.note, inherited.inheritedFrom], ['F2', 'accept', 'Sums stay small', '1.1:F1']);
+});

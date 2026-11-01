@@ -275,7 +275,7 @@ test('a commit after the approval gets a new review round, in review and in deli
   ok(fx.root, ['task', 'agent', '--task', id, '--role', 'reviewer', '--id', 'rev-1']);
   const busy = run(fx.root, ['spec', 'save', '--task', id], spec(branch));
   assert.equal(busy.code, 3);
-  assert.match(busy.stderr, new RegExp(`Fix: Wait for the review \\(cw review show --task ${id}\\); the spec can change once it is approved`));
+  assert.match(busy.stderr, new RegExp(`Fix: Wait for the review \\(cw review show --task ${id}\\); the spec can change once it is saved`));
   const approvedHead = app('rev-parse', branch);
   writeReview(fx, id, 1, 'approved', { head: approvedHead });
   ok(fx.root, ['review', 'show', '--task', id]);

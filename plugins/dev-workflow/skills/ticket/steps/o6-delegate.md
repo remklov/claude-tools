@@ -11,7 +11,7 @@ cw task start --task <id>
 - `--base <branch>` only when the user wants another base than `git.defaultBase`; it must be a local branch of the work repo.
 - Refusals name their fix: a spec with lint errors, a missing confirmation, a pending reset after a misclassification, or (in-place) another task that holds the app's work tree. Ask the user where the fix needs a decision.
 
-The output contains the brief file, the selected rules and procedures, and:
+For a complexity in `workflow.selfImplement` (default `s`) the output says "You implement this task yourself" and prints no Agent call: continue with `cw playbook read steps/o6-self.md`. Otherwise it contains the brief file, the selected rules and procedures, and:
 
 ```text
 Call the Agent tool with exactly these parameters:
@@ -30,16 +30,16 @@ Call the Agent tool with that JSON as it is:
 
 If the call is refused or fails, run it again exactly as printed once; if it still fails, tell the user what the error says.
 
-## 3. Record the agent
+## 3. The agent's id
 
-The Agent result names the agent id. Record it for later SendMessages:
+The SubagentStart hook records the agent's id for later SendMessages (ADR 0014): there is nothing to record. Only when a later command warns that no implementer is recorded (the hook records none while several tasks of this session wait for one), record it from the Agent result:
 
 ```bash
 cw task agent --task <id> --role implementer --id <agentId>
 ```
 
-Then O7, once the implementer has ended: `cw report show --task <id>`. Do not judge the work from the Agent result text; it may only point to a handback.
+Then O7, once the implementer has ended: `cw task review --task <id>`. Do not judge the work from the Agent result text; the agent ends with one status line.
 
 ## Later rounds
 
-`cw task return`, `cw task review` and `cw task start --task <id> --new-agent` print either a SendMessage for the same agent or a fresh Agent call. A fresh Agent call is always followed by `cw task agent --task <id> --role <implementer|reviewer> --id <agentId>` for its role; a SendMessage keeps the recorded id.
+`cw task return`, `cw task review` and `cw task start --task <id> --new-agent` print either a SendMessage for the same agent or a fresh Agent call; the hook records a fresh agent too, and a SendMessage keeps the recorded id.

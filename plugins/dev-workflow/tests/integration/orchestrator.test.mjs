@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { cw, inPlaceConfig, makeInPlace, write } from '../fixtures/repo.mjs';
+import { cw, gitIn, inPlaceConfig, makeInPlace, write } from '../fixtures/repo.mjs';
 
 const spec = (branch) => `## Task: Add the mul helper
 
@@ -20,6 +20,9 @@ const spec = (branch) => `## Task: Add the mul helper
 
 ### Non-goals
 - No division.
+
+### Risks and deploy steps
+- None.
 
 ### Definition of done
 - Checks pass.
@@ -148,7 +151,17 @@ test('ticket context names the source and the ticket or context file of a key, f
   assert.match(contextOf(local, 'APP-123').stdout, /APP-123 · source local: the ticket is docs\/specs\/APP-123\.md \(cw playbook read reference\/local\.md\)/);
   const fx = makeInPlace(t, { config: inPlaceConfig({ tickets: local }) });
   write(fx.root, { 'docs/specs/APP-123.md': '# Search filter\n' });
-  assert.deepEqual(cw(fx.root, ['ticket', 'context', '--ticket', 'APP-123', '--json'], { env: fx.env }).json(), { ticket: 'APP-123', source: 'local', file: 'docs/specs/APP-123.md', exists: true });
+  assert.deepEqual(cw(fx.root, ['ticket', 'context', '--ticket', 'APP-123', '--json'], { env: fx.env }).json(), { ticket: 'APP-123', source: 'local', file: 'docs/specs/APP-123.md', exists: true, work: { branches: [], commits: [] } });
+  // Existing work on the key (ADR 0016): a branch that names it and a commit that names it.
+  const git = gitIn(fx.app, fx.env);
+  git('branch', 'APP-123/feature/search-filter');
+  write(fx.app, { 'filter.txt': 'x\n' });
+  git('add', '-A');
+  git('commit', '-q', '-m', '[FEATURE] Add the search filter (app-123)');
+  const work = cw(fx.root, ['ticket', 'context', '--ticket', 'APP-123', '--json'], { env: fx.env }).json().work;
+  assert.deepEqual(work.branches, ['APP-123/feature/search-filter']);
+  assert.match(work.commits[0], /^\w+ \[FEATURE\] Add the search filter \(app-123\)$/);
+  assert.match(cw(fx.root, ['ticket', 'context', '--ticket', 'APP-123'], { env: fx.env }).stdout, /Existing work on APP-123 \(ask the user whether it is this ticket's before you plan anew\):\n {2}branch APP-123\/feature\/search-filter\n {2}commit /);
   const missing = cw(fx.root, ['ticket', 'context', '--ticket', 'APP-124'], { env: fx.env });
   assert.equal(missing.code, 3);
   assert.match(missing.stderr, /docs\/specs\/APP-124\.md of APP-124 does not exist/);

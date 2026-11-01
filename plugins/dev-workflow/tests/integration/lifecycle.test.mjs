@@ -86,7 +86,7 @@ function lifecycle(fx, { orchestratorCwd, implementerCwd: implementerCwdOf, revi
   ok(implementerCwd, ['checks', '--changed', '--task', id]);
   const report = run(implementerCwd, ['report', 'save', '--task', id], JSON.stringify({ status: 'done', acceptanceCriteria: [{ id: 'AC1', met: true, evidence: 'src/mul.test.mjs › multiplies' }], rulesChecked, handover: { decisions: [], rejected: [], testing: ['cw checks --changed'], pitfalls: [], deviations: [] } }));
   assert.equal(report.code, 0, report.stderr);
-  assert.match(report.stdout, /^```json\n\{\n {2}"kind": "dev-report"/);
+  assert.equal(report.stdout.trim().split('\n').at(-1), `dev-workflow report ${id} round 1: done`);
 
   // O7, O8: the report, foreign commits, the reviewer.
   assert.equal(ok(orchestratorCwd, ['report', 'show', '--task', id]).status, 'done');
@@ -109,7 +109,7 @@ function lifecycle(fx, { orchestratorCwd, implementerCwd: implementerCwdOf, revi
   assert.equal(saved.code, 0, saved.stderr);
 
   // O9: delivery.
-  assert.deepEqual(ok(orchestratorCwd, ['review', 'show', '--task', id]).next, [`cw pr body --task ${id}`, `cw pr command --task ${id}`]);
+  assert.deepEqual(ok(orchestratorCwd, ['review', 'show', '--task', id]).next, [`cw pr body --task ${id} --what <file>`, `cw pr command --task ${id}`]);
   const body = ok(orchestratorCwd, ['pr', 'body', '--task', id]);
   assert.match(body.body, /^## What & why\n\nNO-TICKET: Add mul\n/);
   assert.match(body.body, /## Testing\n\n- `node --test` in `\.` \(app\): pass\n- Proof: `node --test src\/mul\.test\.mjs` fails without the change \(Error \[ERR_MODULE_NOT_FOUND\]: Cannot find module 'src\/mul\.mjs' imported from src\/mul\.test\.mjs\) and passes with it\n/);

@@ -341,8 +341,12 @@ test('--recheck shows a proof whose test is gone at HEAD as stale, does not coun
     ['P1', undefined, 'the test file src/sum3.test.mjs no longer exists at HEAD'],
     ['P2', true, undefined],
   ]);
-  const human = prove(fx.root, ['--recheck']);
+  // P2 was proved at this very commit: it counts without a run (ADR 0018); --fresh runs it again.
+  assert.match(recheck.json().results[1].reused, /^\d{4}-\d\d-\d\dT/);
+  assert.match(prove(fx.root, ['--recheck']).stdout, /\nP2 app:src\/sum-three\.test\.mjs: holds \(proved at this commit at \S+; not run again, --fresh runs it\)\n$/);
+  const human = prove(fx.root, ['--recheck', '--fresh']);
   assert.equal(human.stdout, 'P1 app:src/sum3.test.mjs: stale (the test file src/sum3.test.mjs no longer exists at HEAD); not counted\nP2 app:src/sum-three.test.mjs: holds\n');
+  assert.equal(prove(fx.root, ['--test', 'app:src/sum-three.test.mjs', '--change', 'src/sum.mjs', '--fresh']).code, 2, '--fresh goes with --recheck');
 });
 
 test('worktree mode: the proof runs in the agent worktree, from the main checkout', (t) => {

@@ -10,7 +10,7 @@ Tool: `mcp__plugin_atlassian_atlassian__getJiraIssue`. If your tool list shows i
 {
   "cloudId": "<tickets.site from cw config show, e.g. your-company.atlassian.net>",
   "issueIdOrKey": "<KEY>",
-  "fields": ["summary", "description", "status", "assignee", "issuetype"],
+  "fields": ["summary", "description", "status", "assignee", "issuetype", "comment", "issuelinks"],
   "responseContentFormat": "markdown",
   "updateHistory": false
 }
@@ -18,7 +18,8 @@ Tool: `mcp__plugin_atlassian_atlassian__getJiraIssue`. If your tool list shows i
 
 - The issue is `issues.nodes[0]`, with `key`, `fields.*` and `webUrl`.
 - The site host works as `cloudId` (no discovery call). Only if it is refused, or `tickets.site` is not configured, call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources` once, take the `id` of the site, and repeat the issue call once with it.
-- No other Jira calls: no search, no comments, no transitions, no edits.
+- `comment` and `issuelinks` are issue fields of the Jira REST API (developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues, Get issue): the comments arrive as `fields.comment.comments` (`author.displayName`, `created`, `body`), the links as `fields.issuelinks` (`type.outward` or `type.inward`, and `outwardIssue` or `inwardIssue` with `key` and `fields.summary`). Scope agreed in a comment belongs to the requirement (ADR 0016). Not yet observed through the Atlassian MCP server: if the call refuses the two fields, repeat it once without them and tell the user that the comments were not read.
+- No other Jira calls: no search, no separate comment calls, no transitions, no edits.
 
 ## When Jira is not available
 
@@ -39,6 +40,8 @@ Tool: `mcp__plugin_atlassian_atlassian__getJiraIssue`. If your tool list shows i
 | `status` | the status name in `fields.status` | |
 | `assignee` | the assignee's display name in `fields.assignee` | `null` when unassigned |
 | `url` | `webUrl` | https; required when `source` is `jira` |
+| `comments` | `fields.comment.comments`: `{ "author", "created", "body" }` each | leave out when there are none |
+| `links` | `fields.issuelinks`: `{ "type", "key", "summary" }` each | the link's wording for this issue (`blocks`, `is blocked by`), the other issue's key and summary |
 | `context` | the context file `cw ticket context` named | only when it exists and you read it |
 | `source` | `"jira"` | `"pasted"` for a pasted ticket, `"notes"` for NO-TICKET (O3) |
 

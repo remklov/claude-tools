@@ -2,6 +2,9 @@
 import { NO_TICKET_ALIAS } from './ticket.mjs';
 
 export const SECTIONS = ['Context', 'Requirements', 'Acceptance criteria', 'Non-goals', 'Definition of done'];
+// The operational fallout of the change (ADR 0016); the PR/MR's Risks & deploy steps take it over. Lint
+// warns when it is missing, so a spec saved before it existed still passes.
+export const RISKS_SECTION = 'Risks and deploy steps';
 
 export function specTemplate(task) {
   return `## Task: ${task.title}
@@ -19,6 +22,9 @@ export function specTemplate(task) {
 
 ### Non-goals
 - …
+
+### Risks and deploy steps
+- <configuration per environment (production included), migrations, caches, deploy order, manual steps; or None>
 
 ### Definition of done
 - The checks of every affected package pass (\`cw checks --changed\`)
@@ -95,6 +101,9 @@ export function lintSpec(text, { task, keyPattern, ruleIds = new Set(), ruleIdPr
   const present = SECTIONS.filter((name) => spec.sectionOrder.includes(name));
   if (present.length !== SECTIONS.length) errors.push(`missing sections: ${SECTIONS.filter((name) => !present.includes(name)).join(', ')}`);
   else if (spec.sectionOrder.filter((name) => SECTIONS.includes(name)).join('|') !== SECTIONS.join('|')) errors.push(`the sections must be in this order: ${SECTIONS.join(', ')}`);
+  if (!spec.sectionOrder.includes(RISKS_SECTION)) {
+    warnings.push(`no "### ${RISKS_SECTION}" section: name the configuration per environment (production included), migrations, caches, deploy order and manual steps the change needs, or write None`);
+  } else if (spec.body(RISKS_SECTION).includes('<configuration per environment')) errors.push(`the ${RISKS_SECTION} placeholder is still in the spec: name the fallout, or write None`);
   if (!spec.requirements.length) errors.push('no requirement R1');
   if (!spec.acceptance.length) errors.push('no acceptance criterion AC1');
   for (const [name, prefix] of [['Requirements', 'R'], ['Acceptance criteria', 'AC']]) {

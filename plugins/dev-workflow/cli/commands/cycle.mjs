@@ -5,8 +5,10 @@
 // is never sent a message: it gets a fresh Agent call. So does an implementer whose context grew past
 // workflow.freshImplementerAboveTokens when the work goes back to it (ADR 0012).
 import { existsSync, renameSync, rmSync } from 'node:fs';
+import { listFlag } from '../lib/args.mjs';
 import { agentCall, findingsToFix, returnMessage, reviewerFollowUp, reviewerRecheck, specChangedMessage, writeBrief } from '../lib/brief.mjs';
 import { keepWork, releaseWorktree, renderTaskBrief, resetWork, resolveBase, sameCommit, taskBranchTip, unknownChanges } from '../lib/cycle.mjs';
+import { DECISIONS, askUser, decisionFor, fixDecided, needsUser, recordDecisions, undecided } from '../lib/decisions.mjs';
 import { readJson } from '../lib/fsx.mjs';
 import { quote } from '../lib/host/index.mjs';
 import { branchExists, currentBranch } from '../lib/git.mjs';
@@ -18,6 +20,7 @@ import { kTokens, measureAgentContext } from '../lib/transcript.mjs';
 import { taskPath } from '../lib/workspace.mjs';
 import { mainCheckout } from '../lib/worktree.mjs';
 import { emit, loadTaskContext, requireFlag } from './common.mjs';
+import { foreignCheck, printForeign } from './delivery.mjs';
 import { lintTaskSpec } from './spec.mjs';
 
 const now = () => new Date().toISOString();
@@ -69,8 +72,36 @@ const stamp = (ws, task, role) =>
 const staleReason = (task, role) =>
   `${task.agents[role].id} was recorded in session ${task.agents[role].session ?? '(none)'}, and the task now belongs to session ${task.ownerSession ?? '(none)'}`;
 
+// The report lines of cw report show; cw task review prints them before it starts the review.
+function printReport(out, report) {
+  out.print(`Report round ${report.round}: ${report.status} · ${report.commits.length} commit(s) on ${report.branch} · checks ${report.checks.overall}${report.checks.current ? '' : ' (not current)'} · ${report.proofs.filter((proof) => proof.holds).length} holding proof(s)`);
+  for (const ac of report.acceptanceCriteria) out.print(`  ${ac.id} ${ac.met ? 'met' : 'NOT met'}: ${ac.evidence}`);
+  for (const proof of report.staleProofs ?? []) out.print(`stale proof ${proof.id} (${proof.test}), not counted: ${proof.reason}`);
+  if (report.blocked) out.print(`Blocked: ${report.blocked.question}\nNeeded: ${report.blocked.needed}`);
+  if (report.misclassified) out.print(`Misclassified: ${report.misclassified.reason} (suggests ${report.misclassified.suggested})`);
+  for (const risk of report.risks) out.print(`risk: ${risk}`);
+  for (const point of report.openPoints) out.print(`open point${point.tag ? ` (${point.tag})` : ''}: ${point.text}`);
+  for (const warning of report.warnings) out.warn(warning);
+}
+
+// The SubagentStart hook records each workflow agent (§9), so the orchestrator records none by hand
+// (ADR 0014). It records nothing when several tasks of the session wait for the role; then the
+// command that reads the agent's result names cw task agent.
+function unrecordedAgent(task, role) {
+  if (task.agents[role]?.id) return null;
+  return `No ${role} is recorded for round ${task.round}: the SubagentStart hook records one only while a single task of this session waits for it. Record it for later messages: cw task agent --task ${task.id} --role ${role} --id <the agentId the Agent result names>.`;
+}
+
 function printDelegation(ctx, value) {
   const { out } = ctx;
+  if (value.report) printReport(out, value.report);
+  if (value.foreign && !value.foreign.clean) printForeign(out, value.foreign);
+  if (value.selfImplement) {
+    const { complexity, brief, findings } = value.selfImplement;
+    out.print(findings
+      ? `You implement this task yourself (ADR 0019). Fix these, as steps 3 to 8 of cw playbook read steps/o6-self.md describe:\n${findings.join('\n')}`
+      : `You implement this task yourself: complexity ${complexity} is in workflow.selfImplement (ADR 0019). Follow cw playbook read steps/o6-self.md; the brief is ${brief}. To delegate it instead: cw task start --task ${value.task} --new-agent.`);
+  }
   if (value.freshAgent) out.print(`A fresh ${value.role}: ${value.freshAgent}.`);
   if (value.context?.unmeasured) out.print(value.context.unmeasured);
   if (value.agentCall) {
@@ -141,6 +172,8 @@ function start(ctx) {
   if (ws.mode === 'in-place') requireFreeWorkTree(ws, task);
   requireCleanSpec(ws, task);
   const base = resolveBase(ws, ctx.flags.base ?? ws.config.git.defaultBase);
+  // The orchestrator implements the complexities of workflow.selfImplement itself (ADR 0019).
+  const self = ws.config.workflow.selfImplement.includes(task.complexity) && !ctx.flags.agent;
   // A same-named branch that exists now and is not kept for the task is not cw's: reset must not delete it.
   const branchNow = branchExists(ws.mode === 'in-place' ? ws.workRepo : mainCheckout(ws), task.branch);
   const { task: started, brief } = delegateImplementer(ws, task, (current) => {
@@ -151,6 +184,7 @@ function start(ctx) {
     current.agents.implementer = null;
     current.previousComplexity = null;
     current.returnedWith = null;
+    current.self = self;
     // A branch kept with cw task reset --keep (or handed over) is continued. One that only task cleanup
     // saw is not: ws setup then refuses a same-named branch that cw did not create.
     if (!['keep', 'handover'].includes(current.resumeBranchBy)) setResumeBranch(current, false);
@@ -169,8 +203,9 @@ function start(ctx) {
     brief: brief.path,
     rules: brief.rules,
     procedures: brief.procedures,
-    agentCall: agentCall(ws, started, 'implementer', brief.path),
-    next: [`cw task agent --task ${started.id} --role implementer --id <the agentId the Agent tool returned>`, `cw report show --task ${started.id}`],
+    ...(self
+      ? { selfImplement: { complexity: started.complexity, brief: brief.path }, next: [`cw ws setup --task ${started.id}`, `cw task review --task ${started.id} once your report is saved`] }
+      : { agentCall: agentCall(ws, started, 'implementer', brief.path), next: [`cw task review --task ${started.id}`] }),
   };
   emit(ctx, value, () => printDelegation(ctx, value));
 }
@@ -196,6 +231,7 @@ function restartImplementer(ctx, ws, task) {
       agentSwitch: { role: 'implementer', reason: 'new-agent', previous },
     });
     current.steps = freshSteps();
+    current.self = false;
     forgetImplementer(ws, current, released);
     if (ws.mode === 'in-place') setResumeBranch(current, resume, 'handover');
   }, { fresh: true });
@@ -212,7 +248,7 @@ function restartImplementer(ctx, ws, task) {
     freshAgent: previous ? `it replaces ${previous}` : 'no implementer was recorded',
     releasedWorktree: handover.released,
     agentCall: agentCall(ws, restarted, 'implementer', brief.path),
-    next: [`cw task agent --task ${restarted.id} --role implementer --id <the agentId the Agent tool returned>`, `cw report show --task ${restarted.id}`],
+    next: [`cw task review --task ${restarted.id}`],
   };
   emit(ctx, value, () => printDelegation(ctx, value));
 }
@@ -223,8 +259,9 @@ const freshImplementer = (task) => `cw task start --task ${task.id} --new-agent`
 
 function nextForReport(task, report) {
   const agent = task.agents.implementer?.id ?? '<implementer agentId>';
-  if (report.status === 'done') return [`cw git foreign-commits --task ${task.id}`, `cw task review --task ${task.id}`];
+  if (report.status === 'done') return [`cw task review --task ${task.id}`];
   if (report.status === 'blocked') {
+    if (task.self) return [`ask the user, put the answer into the spec (cw spec save --task ${task.id}), go on with the work and save the report again`];
     if (staleAgent(task, 'implementer')) {
       return [`answer from the spec and the code, else ask the user; put the answer into the spec (cw spec save --task ${task.id}), then start a fresh implementer: ${freshImplementer(task)} (${staleReason(task, 'implementer')})`];
     }
@@ -234,10 +271,11 @@ function nextForReport(task, report) {
 }
 
 function missingReportFix(task) {
+  if (task.self) return `You implement this task yourself: finish with cw report save --task ${task.id} (cw playbook read steps/o6-self.md, step 8).`;
   const agent = task.agents.implementer?.id;
   if (!agent) return `Wait for the implementer to finish; it ends with cw report save. If no implementer runs (its Agent call was lost or denied), start one: ${freshImplementer(task)}.`;
   if (staleAgent(task, 'implementer')) return `Start a fresh implementer: ${freshImplementer(task)} (${staleReason(task, 'implementer')}).`;
-  return `If the implementer ended without one, SendMessage ${agent}: "Finish with cw report save --task ${task.id} and end with its JSON fence." If it is gone, start a fresh one: ${freshImplementer(task)}.`;
+  return `If the implementer ended without one, SendMessage ${agent}: "Finish with cw report save --task ${task.id} and end with the line it prints." If it is gone, start a fresh one: ${freshImplementer(task)}.`;
 }
 
 function reportShow(ctx) {
@@ -247,18 +285,11 @@ function reportShow(ctx) {
   const { path, data: report } = readRoundFile(ws, task, 'report');
   if (!report) throw preconditionError(`There is no report for round ${task.round} yet (${path}).`, missingReportFix(task));
   stamp(ws, task, 'implementer');
-  const value = { task: task.id, round: task.round, file: path, ...report, next: nextForReport(task, report) };
+  const unrecorded = task.self ? null : unrecordedAgent(task, 'implementer');
+  const value = { task: task.id, round: task.round, file: path, ...report, warnings: [...report.warnings, ...(unrecorded ? [unrecorded] : [])], next: nextForReport(task, report) };
   emit(ctx, value, () => {
-    const { out } = ctx;
-    out.print(`Report round ${value.round}: ${value.status} · ${value.commits.length} commit(s) on ${value.branch} · checks ${value.checks.overall}${value.checks.current ? '' : ' (not current)'} · ${value.proofs.filter((proof) => proof.holds).length} holding proof(s)`);
-    for (const ac of value.acceptanceCriteria) out.print(`  ${ac.id} ${ac.met ? 'met' : 'NOT met'}: ${ac.evidence}`);
-    for (const proof of value.staleProofs ?? []) out.print(`stale proof ${proof.id} (${proof.test}), not counted: ${proof.reason}`);
-    if (value.blocked) out.print(`Blocked: ${value.blocked.question}\nNeeded: ${value.blocked.needed}`);
-    if (value.misclassified) out.print(`Misclassified: ${value.misclassified.reason} (suggests ${value.misclassified.suggested})`);
-    for (const risk of value.risks) out.print(`risk: ${risk}`);
-    for (const point of value.openPoints) out.print(`open point${point.tag ? ` (${point.tag})` : ''}: ${point.text}`);
-    for (const warning of value.warnings) out.warn(warning);
-    out.print(`Next: ${value.next.join('; then ')}`);
+    printReport(ctx.out, value);
+    ctx.out.print(`Next: ${value.next.join('; then ')}`);
   });
 }
 
@@ -294,13 +325,32 @@ function review(ctx) {
   let mutate = null;
   let moved = null;
   let archived = null;
+  let report = null;
+  let foreign = null;
   if (task.phase === 'implement') {
-    if (reportFile.data?.status !== 'done') {
-      throw preconditionError(`The report of round ${task.round} is ${reportFile.data?.status ?? 'missing'}, not done.`, `Read it first: cw report show --task ${task.id}.`);
+    if (!reportFile.data) throw preconditionError(`There is no report for round ${task.round} yet (${reportFile.path}).`, missingReportFix(task));
+    if (reportFile.data.status !== 'done') {
+      throw preconditionError(`The report of round ${task.round} is ${reportFile.data.status}, not done.`, `Read it: cw report show --task ${task.id}.`);
+    }
+    // The checks of O7 and O8 §1 in this one call: the report and the task branch's commits (ADR 0014).
+    report = { round: task.round, ...reportFile.data };
+    foreign = foreignCheck(ws, task);
+    if (!foreign.clean && !foreign.staleImplementer) {
+      const problems = [
+        ...(foreign.onTaskBranch ? [] : [`${foreign.workTree} is not on ${task.branch}`]),
+        ...foreign.foreign.map((commit) => `foreign commit ${commit.sha} ${commit.subject} (${commit.reasons.join(', ')})`),
+      ];
+      throw failedError(
+        `The task branch is not ready for a review:\n- ${problems.join('\n- ')}`,
+        `${foreign.fix}; the implementer then reruns cw checks --changed --task ${task.id} and saves its report again. When it has ended, run cw task review --task ${task.id} again.`,
+        { foreign },
+      );
     }
     mutate = (current) => {
       transition(current, 'review', { note: `review round ${current.reviewRound + 1}`, by: 'cw task review' });
       current.reviewRound += 1;
+      // The orchestrator read the report here, as with cw report show (the stop gate's shownAt).
+      if (current.agents.implementer) current.agents.implementer = { ...current.agents.implementer, shownAt: now() };
     };
   } else if (['review', 'deliver'].includes(task.phase) && saved.data) {
     moved = movedAfterApproval(ws, task, saved);
@@ -365,20 +415,20 @@ function review(ctx) {
   const message = movedFrom
     ? reviewerRecheck(task, brief.path, movedFrom)
     : reviewerFollowUp(task, brief.path, reportFile.path, previous.data?.head ?? task.base.commit);
+  const unrecorded = report && !loaded.self ? unrecordedAgent(loaded, 'implementer') : null;
+  if (unrecorded) ctx.out.warn(unrecorded);
   const value = {
     task: task.id,
     role: 'reviewer',
     round: task.round,
     reviewRound: task.reviewRound,
+    ...(report ? { report, foreign } : {}),
     brief: brief.path,
     rules: brief.rules,
     procedures: brief.procedures,
     ...(freshAgent ? { freshAgent } : {}),
     ...(followUp ? { sendMessage: { to: reviewer, message } } : { agentCall: agentCall(ws, task, 'reviewer', brief.path) }),
-    next: [
-      ...(followUp ? [] : [`cw task agent --task ${task.id} --role reviewer --id <the agentId the Agent tool returned>`]),
-      `cw review show --task ${task.id}`,
-    ],
+    next: [`cw review show --task ${task.id}`],
   };
   emit(ctx, value, () => printDelegation(ctx, value));
 }
@@ -392,7 +442,13 @@ function missingReviewFix(task) {
   const agent = task.agents.reviewer?.id;
   if (!agent) return `Wait for the reviewer to finish; it ends with cw review save. If no reviewer runs, start one: cw task review --task ${task.id} --new-agent.`;
   if (staleAgent(task, 'reviewer')) return `Start a fresh reviewer: cw task review --task ${task.id} --new-agent (${staleReason(task, 'reviewer')}).`;
-  return `If the reviewer ended without one, SendMessage ${agent}: "Finish with cw review save --task ${task.id} and end with its JSON fence." If it is gone, start a fresh one: cw task review --task ${task.id} --new-agent.`;
+  return `If the reviewer ended without one, SendMessage ${agent}: "Finish with cw review save --task ${task.id} and end with the line it prints." If it is gone, start a fresh one: cw task review --task ${task.id} --new-agent.`;
+}
+
+// How review show marks a finding the user decides on (ADR 0015).
+function userMark(finding) {
+  if (finding.userDecision) return ` · the user decided: ${finding.userDecision.as}${finding.userDecision.note ? ` (${finding.userDecision.note})` : ''}`;
+  return finding.needsUser ? ' · needs the user\'s decision' : '';
 }
 
 function printReview(ctx, value) {
@@ -401,10 +457,18 @@ function printReview(ctx, value) {
   if (value.summary) out.print(value.summary);
   for (const ac of value.acceptanceCriteria) out.print(`  ${ac.id} ${ac.met ? 'met' : 'NOT met'}: ${ac.evidence}`);
   for (const finding of value.findings) {
-    out.print(`  ${finding.id} [${finding.severity}${finding.sendAlong ? ', send along' : ''} · ${finding.rule}] ${finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}: ` : ''}${finding.issue}`);
+    out.print(`  ${finding.id} [${finding.severity}${finding.sendAlong ? ', send along' : ''} · ${finding.rule}${userMark(finding)}] ${finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}: ` : ''}${finding.issue}${finding.needsUser && finding.suggestion ? ` — recommended: ${finding.suggestion}` : ''}`);
   }
+  for (const warning of value.warnings ?? []) out.warn(warning);
   out.print(`Next: ${value.next.join('; then ')}`);
 }
+
+// The findings with the user's part: whether one needs a decision, and the decision made.
+const withDecisions = (task, review) => blockingFirst(review.findings).map((finding) => ({
+  ...finding,
+  needsUser: needsUser(finding),
+  userDecision: decisionFor(task, review, finding.id),
+}));
 
 const blockingFirst = (findings) => [...findings].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'blocking' ? -1 : 1));
 
@@ -417,7 +481,7 @@ function reviewShow(ctx) {
   if (task.phase === 'escalated') {
     // Read-only: the open findings again for the user's decision, after a rebind too.
     if (!saved) throw preconditionError(`There is no review for round ${task.round} (${path}).`, `Ask the user how to continue: ${NEXT_BY_PHASE.escalated(task.id)}.`);
-    const value = { task: task.id, round: task.round, reviewRound: task.reviewRound, maxReviewRounds: max, file: path, ...saved, findings: blockingFirst(saved.findings), escalated: true, next: escalatedNext(task) };
+    const value = { task: task.id, round: task.round, reviewRound: task.reviewRound, maxReviewRounds: max, file: path, ...saved, findings: withDecisions(task, saved), escalated: true, next: escalatedNext(task) };
     return emit(ctx, value, () => printReview(ctx, value));
   }
   if (!saved) throw preconditionError(`There is no review for round ${task.round} yet (${path}).`, missingReviewFix(task));
@@ -426,12 +490,17 @@ function reviewShow(ctx) {
   if (escalate) {
     updateTask(ws, task.id, (current) => transition(current, 'escalated', { note: `${current.reviewRound} review rounds without approval (max ${max})`, by: 'cw review show' }));
   }
-  const next = saved.status === 'approved'
-    ? [`cw pr body --task ${task.id}`, `cw pr command --task ${task.id}`]
-    : escalate
-      ? escalatedNext(task)
-      : [`cw task return --task ${task.id}${staleAgent(task, 'implementer') ? ' --new-agent' : ''}`];
-  const value = { task: task.id, round: task.round, reviewRound: task.reviewRound, maxReviewRounds: max, file: path, ...saved, findings: blockingFirst(saved.findings), escalated: escalate, next };
+  // The user decides on the marked findings before anything goes back or is delivered (ADR 0015).
+  const open = escalate ? [] : undecided(task, saved);
+  const returnCommand = `cw task return --task ${task.id}${staleAgent(task, 'implementer') ? ' --new-agent' : ''}`;
+  const deliver = [`cw pr body --task ${task.id} --what <file>`, `cw pr command --task ${task.id}`];
+  let next;
+  if (escalate) next = escalatedNext(task);
+  else if (saved.status !== 'approved') next = [...(open.length ? [askUser(task, open)] : []), returnCommand];
+  else if (open.length) next = [askUser(task, open), `${returnCommand} when the user chose to fix one, else ${deliver.join('; then ')}`];
+  else next = fixDecided(task, saved).length ? [returnCommand] : deliver;
+  const unrecorded = unrecordedAgent(task, 'reviewer');
+  const value = { task: task.id, round: task.round, reviewRound: task.reviewRound, maxReviewRounds: max, file: path, ...saved, findings: withDecisions(task, saved), escalated: escalate, warnings: unrecorded ? [unrecorded] : [], next };
   emit(ctx, value, () => printReview(ctx, value));
 }
 
@@ -449,11 +518,24 @@ function returnMode(ctx) {
 // The review whose findings go back ({ round, data }), or null for a spec change.
 function checkReturn(ws, task, mode, ctx) {
   if (mode === 'findings') {
-    if (task.phase !== 'review') throw wrongPhase(task, 'cw task return', ['review']);
     const saved = readRoundFile(ws, task, 'review').data;
+    const open = saved ? undecided(task, saved) : [];
+    // After an approval only the fixes the user chose go back, also from deliver (before the PR).
+    if (saved?.status === 'approved' && ['review', 'deliver'].includes(task.phase)) {
+      if (open.length) throw preconditionError(`The user has not decided on ${open.map((finding) => finding.id).join(', ')} of review round ${task.reviewRound} yet.`, `First ${askUser(task, open)}.`);
+      if (!fixDecided(task, saved).length) {
+        throw preconditionError(`The review of round ${task.round} is approved, and the user decided to fix none of its findings; nothing goes back.`, `Deliver: cw pr body --task ${task.id} --what <file>.`);
+      }
+      return { round: task.round, data: saved };
+    }
+    if (task.phase !== 'review') throw wrongPhase(task, 'cw task return', ['review']);
     if (saved?.status !== 'changes_requested') {
       throw preconditionError(`The review of round ${task.round} is ${saved?.status ?? 'missing'}; only requested changes go back.`, `Read it: cw review show --task ${task.id}.`);
     }
+    if (open.length) {
+      throw preconditionError(`The user has not decided on ${open.map((finding) => finding.id).join(', ')} of review round ${task.reviewRound} yet; the answers go back in this round.`, `First ${askUser(task, open)}.`);
+    }
+    if (task.specRevised) requireCleanSpec(ws, task);
     if (task.reviewRound >= ws.config.workflow.maxReviewRounds) {
       throw preconditionError(`Task ${task.id} reached ${task.reviewRound} review rounds (the maximum).`, `cw review show --task ${task.id} escalates it; then ask the user.`);
     }
@@ -516,23 +598,31 @@ function giveBack(ctx) {
   requireActive(task);
   const mode = returnMode(ctx);
   const review = checkReturn(ws, task, mode, ctx);
-  const { reason: fresh, why, switch: agentSwitch, context } = freshImplementerReason(ws, task, ctx);
+  // A task the orchestrator implements itself stays its own unless --new-agent hands it to an agent.
+  const self = Boolean(task.self) && !ctx.flags['new-agent'];
+  const { reason: fresh, why, switch: agentSwitch, context } = self ? { reason: null } : freshImplementerReason(ws, task, ctx);
   const implementer = task.agents.implementer?.id;
-  if (!fresh && !implementer) {
+  if (!self && !fresh && !implementer) {
     throw preconditionError(`No implementer agent is recorded for ${task.id}, so there is nobody to send the message to.`, `Start a fresh one: cw task return --task ${task.id}${mode === 'spec' ? ' --spec-changed --note "…"' : mode === 'continue' ? ' --continue --note "…"' : ''} --new-agent.`);
   }
   const note = ctx.flags.note ?? null;
   const reviewRound = task.reviewRound;
   const resume = leftTaskBranch(ws, task);
   const { task: back, brief, handover } = delegateImplementer(ws, task, (current, released) => {
-    const historyNote = mode === 'spec' ? `spec changed: ${note}` : mode === 'continue' ? `the user continues after the escalation: ${note}` : `review round ${current.reviewRound} requested changes`;
+    const afterApproval = review?.data?.status === 'approved';
+    const historyNote = mode === 'spec'
+      ? `spec changed: ${note}`
+      : mode === 'continue'
+        ? `the user continues after the escalation: ${note}`
+        : afterApproval ? `the user decided to fix findings of the approved review round ${current.reviewRound}` : `review round ${current.reviewRound} requested changes`;
     transition(current, 'implement', { note: historyNote, by: 'cw task return' });
     current.round += 1;
     if (fresh) {
       current.history.push({ at: now(), from: 'implement', to: 'implement', note: `a fresh implementer for round ${current.round} (${why})`, by: 'cw task return', agentSwitch });
     }
     current.steps = freshSteps();
-    current.returnedWith = { mode, review: review?.round ?? null, note };
+    current.returnedWith = { mode, review: review?.round ?? null, note, specRevised: Boolean(current.specRevised) };
+    current.specRevised = false;
     if (mode !== 'findings') {
       current.cycle += 1;
       current.reviewRound = 0;
@@ -540,11 +630,17 @@ function giveBack(ctx) {
     }
     if (ws.mode === 'in-place') setResumeBranch(current, resume, 'handover');
     if (fresh) forgetImplementer(ws, current, released);
+    current.self = self;
+    // The orchestrator's own worktree is gone after task cleanup: ws setup adds it again on the branch.
+    if (self && ws.mode === 'worktree' && !(current.workTree && existsSync(current.workTree))) {
+      current.workTree = null;
+      setResumeBranch(current, true, 'handover');
+    }
   }, { fresh: Boolean(fresh) });
   // A PR/MR body written for the earlier state must not be reused (cw pr command reuses an existing one).
   if (task.phase === 'deliver') rmSync(prBodyPath(ws, back), { force: true });
   let message = null;
-  if (!fresh) {
+  if (!fresh && !self) {
     message = mode === 'spec'
       ? specChangedMessage(back, note, brief.path, { setupFirst: resume })
       : returnMessage({ ...back, reviewRound }, review?.data, brief.path, { decision: mode === 'continue' ? note : null, setupFirst: resume });
@@ -557,16 +653,50 @@ function giveBack(ctx) {
     round: back.round,
     cycle: back.cycle,
     brief: brief.path,
-    findings: review ? findingsToFix(review.data) : [],
+    findings: review ? findingsToFix(review.data, back.decisions) : [],
     releasedWorktree: handover.released,
     ...(context ? { context } : {}),
-    ...(fresh ? { freshAgent: fresh, agentCall: agentCall(ws, back, 'implementer', brief.path) } : { sendMessage: { to: implementer, message } }),
-    next: [
-      ...(fresh ? [`cw task agent --task ${back.id} --role implementer --id <the agentId the Agent tool returned>`] : []),
-      `cw report show --task ${back.id}`,
-    ],
+    ...(self
+      ? { selfImplement: { complexity: back.complexity, brief: brief.path, findings: review ? findingsToFix(review.data, back.decisions) : [`The spec changed: ${note ?? ''}`] } }
+      : fresh ? { freshAgent: fresh, agentCall: agentCall(ws, back, 'implementer', brief.path) } : { sendMessage: { to: implementer, message } }),
+    next: [...(self && !back.workTree ? [`cw ws setup --task ${back.id}`] : []), `cw task review --task ${back.id}${self ? ' once your report is saved' : ''}`],
   };
   emit(ctx, value, () => printDelegation(ctx, value));
+}
+
+// --- review decide ------------------------------------------------------------------------------------
+
+// The next step once the user answered: more answers, the round back to the implementer, or delivery.
+function afterDecisions(task, review) {
+  const open = undecided(task, review);
+  if (open.length) return [askUser(task, open)];
+  if (task.phase === 'escalated') return escalatedNext(task);
+  if (review.status === 'changes_requested' || fixDecided(task, review).length) return [`cw task return --task ${task.id}${staleAgent(task, 'implementer') ? ' --new-agent' : ''}`];
+  return [`cw pr body --task ${task.id} --what <file>`, `cw pr command --task ${task.id}`];
+}
+
+function decide(ctx) {
+  const { ws, task } = loadTaskContext(ctx);
+  requireActive(task);
+  if (!['review', 'deliver', 'escalated'].includes(task.phase)) throw wrongPhase(task, 'cw review decide', ['review', 'deliver', 'escalated']);
+  const { path, data: review } = readRoundFile(ws, task, 'review');
+  if (!review) throw preconditionError(`There is no review for round ${task.round} (${path}).`, missingReviewFix(task));
+  const as = requireFlag(ctx.flags, 'as', `Pass --as ${DECISIONS.join('|')}.`);
+  if (!DECISIONS.includes(as)) throw usageError(`--as ${as} is not a decision`, `Use --as ${DECISIONS.join('|')}: fix it in this task, a ticket for later, or accept it as it is.`);
+  const note = requireFlag(ctx.flags, 'note', 'Pass the user\'s answer: --note "<what the user said>".');
+  const wanted = listFlag(ctx.flags, 'finding');
+  if (!wanted.length) throw usageError('--finding is missing', `Pass the finding ids of review round ${task.reviewRound}, for example --finding F2 or --finding F2,F3.`);
+  const unknown = wanted.filter((id) => !review.findings.some((finding) => finding.id === id));
+  if (unknown.length) throw usageError(`review round ${task.reviewRound} has no finding ${unknown.join(', ')}`, `Its findings are ${review.findings.map((finding) => finding.id).join(', ') || 'none'}.`);
+  const findings = review.findings.filter((finding) => wanted.includes(finding.id));
+  // A fix after the delivery started moves the branch: the PR/MR body is written again afterwards.
+  if (as === 'fix' && task.phase === 'deliver' && task.prUrl) {
+    throw preconditionError(`The PR/MR of ${task.id} is open already (${task.prUrl}).`, 'Ask the user: a fix now goes into a new task; record the answer with --as ticket.');
+  }
+  const { task: updated } = updateTask(ws, task.id, (current) => recordDecisions(current, review, findings, { as, note, at: now() }), { expectRev: task.rev });
+  const next = afterDecisions(updated, review);
+  const value = { task: updated.id, review: path, findings: findings.map((finding) => finding.id), as, note, next };
+  emit(ctx, value, () => ctx.out.print(`Recorded for ${value.findings.join(', ')}: ${as} (${note}).\nNext: ${next.join('; then ')}`));
 }
 
 // --- task reset ---------------------------------------------------------------------------------------
@@ -611,9 +741,9 @@ export const commands = [
   {
     path: ['task', 'start'],
     group: 'orchestrator',
-    usage: 'cw task start --task <id> [--base <branch>] | cw task start --task <id> --new-agent',
-    summary: 'Start an implementer round: record the base, write the brief, print the exact Agent call (O6); --new-agent replaces a lost implementer',
-    flags: { task: 'string', base: 'string', 'new-agent': 'boolean' },
+    usage: 'cw task start --task <id> [--base <branch>] [--agent] | cw task start --task <id> --new-agent',
+    summary: 'Start an implementer round: record the base, write the brief, print the exact Agent call, or the self-implementation for workflow.selfImplement (O6); --agent delegates anyway; --new-agent replaces a lost implementer or hands your own work to one',
+    flags: { task: 'string', base: 'string', agent: 'boolean', 'new-agent': 'boolean' },
     run: start,
   },
   {
@@ -639,6 +769,14 @@ export const commands = [
     summary: "Show the reviewer's result; escalates after the maximum review rounds (O8)",
     flags: { task: 'string' },
     run: reviewShow,
+  },
+  {
+    path: ['review', 'decide'],
+    group: 'orchestrator',
+    usage: 'cw review decide --task <id> --finding <F>[,<F>] --as fix|ticket|accept --note <the user\'s answer>',
+    summary: "Record the user's decision on review findings: fix them in this task, a ticket for later, or accept them (O8)",
+    flags: { task: 'string', finding: 'list', as: 'string', note: 'string' },
+    run: decide,
   },
   {
     path: ['task', 'return'],

@@ -17,7 +17,7 @@ The Agent call was refused or failed, the agent ended without a report, or its w
 
 - No report: `cw report show --task <id>` exits 3 and its `Fix:` says what to send the same agent, or to start a fresh one with `cw task start --task <id> --new-agent` (only while the round has no report or a blocked one).
 - No review: `cw review show --task <id>` names the SendMessage or `cw task review --task <id> --new-agent`.
-- A fresh Agent call is always followed by `cw task agent --task <id> --role <implementer|reviewer> --id <agentId>`.
+- A fresh agent is recorded by the SubagentStart hook. Only when a command warns that none is recorded (several tasks of this session waited for the role): `cw task agent --task <id> --role <implementer|reviewer> --id <agentId>` with the id the Agent result names.
 - The SubagentStop hook keeps an agent running (at most twice) until it has saved its report or review; an agent that still ends without one is gone.
 
 ## An implementer with a large context
@@ -43,13 +43,14 @@ On a refusal ask the user. Keep the committed work and let the new implementer c
 | spec, classify, confirm | `cw spec save`, `cw spec lint`; the task returns to spec, so classify (O4) and confirm (O5) again |
 | implement, report blocked | `cw spec save`, `cw spec lint`, then what `cw` prints: the answer to the same implementer, or a fresh one |
 | implement (working), review (open) | not possible: wait for the report or the review |
+| review (changes requested) | `cw spec save`, `cw spec lint`, then `cw task return --task <id>`: the user's answers on the findings go back with the new spec (ADR 0015) |
 | review (approved), deliver, escalated | `cw spec save`, `cw spec lint`, then `cw task return --task <id> --spec-changed --note "<what changed>"`; a new cycle starts |
 
 A changed spec after an approval blocks every `pr` command of `cw` and `cw task end --task <id> --outcome done` until `cw task return --task <id> --spec-changed --note "<what changed>"` ran.
 
 ## Foreign commits
 
-`cw git foreign-commits --task <id>` exits 1 when the branch holds commits of other work, or the work tree left the branch. Send the printed command to the same implementer, with the request to rerun `cw checks --changed --task <id>` and save the report again. Interleaved foreign commits cannot be rebased away: ask the user.
+`cw task review --task <id>` refuses to start a review (exit 1) when the branch holds commits of other work, or the work tree left the branch; `cw git foreign-commits --task <id>` shows the same at any time. Send the printed command to the same implementer, with the request to rerun `cw checks --changed --task <id>` and save the report again. Interleaved foreign commits cannot be rebased away: ask the user.
 
 ## The escalation
 

@@ -6,7 +6,7 @@ user-invocable: false
 
 # Reviewer playbook
 
-You review one dev-workflow task, read-only. Your prompt names the task id and the brief file. Read the brief completely first (the spec, the packages and checks, the rules that apply, the reviewer procedures, and the inputs: the implementer's report, your previous review, the work tree). Then run R1 to R8 in order. Pass `--task <id>` to every `cw` command that takes it (every command of R1 to R8 does; `cw rules show <ID>` does not); every failure prints `Fix:`, follow it.
+You review one dev-workflow task, read-only. Your prompt names the task id and the brief file. Read the brief completely first (the ticket, the spec, the packages and checks, the rules that apply, the reviewer procedures, the user's decisions on earlier findings, and the inputs: the implementer's report, your previous review, the work tree). Then run R1 to R8 in order. Pass `--task <id>` to every `cw` command that takes it (every command of R1 to R8 does; `cw rules show <ID>` does not); every failure prints `Fix:`, follow it.
 
 ## Read-only
 
@@ -27,13 +27,14 @@ You review one dev-workflow task, read-only. Your prompt names the task id and t
 
 ### R2 Checks
 
-`cw checks --changed --task <id>` runs the checks of every package with changed files in the task's work tree, whatever your cwd. A failing check is a blocking finding (rule `correctness`, naming the check and the first failure). `no-package`: run `cw checks --task <id> --package <package>` for the package that uses the files, or request changes with a blocking `scope` finding.
+`cw checks --changed --task <id>` runs the checks of every package with changed files in the task's work tree, whatever your cwd. When the implementer's last passing run covered exactly this content, it reuses that run and names its file (ADR 0018); add `--fresh` only when you have a reason to doubt it, such as a flaky test. A failing check is a blocking finding (rule `correctness`, naming the check and the first failure). `no-package`: run `cw checks --task <id> --package <package>` for the package that uses the files, or request changes with a blocking `scope` finding. Its rule hints (a whitespace-only hunk, an abbreviation, a boolean without its prefix, a helper with few references) are input for R4, not findings: check each against its rule.
 
-### R3 Acceptance criteria and proofs
+### R3 Ticket, acceptance criteria and proofs
 
+- Compare the ticket in your brief (description, acceptance criteria, comments, linked issues) with the spec and the diff, in both directions. A requirement the ticket states that neither the spec nor the diff covers, or two criteria that contradict each other, is a finding with rule `spec` and `decision: true` (below): the user decides. A change the diff makes that neither asks for is a scope question (R1).
 - Check every acceptance criterion of the spec against the code and its tests. Evidence names the test (file and test name), its proof id, or the lines you verified.
 - Acceptance criteria are always testable. A check only a person can do (a visual detail in a browser) is no criterion: the spec lists it under Definition of done as a manual check, and the implementer lists it as an open point with tag `manual`; it needs no test and is no finding. Every acceptance criterion needs a test (next point).
-- `cw prove --task <id> --recheck` re-runs the recorded proofs that held. A stale proof (its test or change file is gone) is listed and not counted. A proof that no longer holds, a test that would pass without the change, or a criterion without a test is a blocking CORE-TEST-SPEC finding; where CORE-TEST-SPEC does not apply to the task, use rule `spec` (the recheck's `Fix:` names which).
+- `cw prove --task <id> --recheck` re-runs the recorded proofs that held; a proof `cw` recorded at this very commit counts without a run (`--fresh` runs it). A stale proof (its test or change file is gone) is listed and not counted. A proof that no longer holds, a test that would pass without the change, or a criterion without a test is a blocking CORE-TEST-SPEC finding; where CORE-TEST-SPEC does not apply to the task, use rule `spec` (the recheck's `Fix:` names which).
 - A bug fix without a holding regression proof cannot be approved.
 - An approval needs the recheck after the implementer's latest report, at the branch tip: run it again after anything moved.
 
@@ -47,7 +48,11 @@ Follow the reviewer procedures inlined in your brief, step by step. A procedure 
 
 ### R6 Correctness and security
 
-Beyond the rules: logic errors, unhandled edge cases and error paths the spec implies, broken callers of a changed contract, race conditions, data loss, injection, secrets in code or logs, missing authorization. Each defect is a blocking finding with rule `correctness` or `security`, a file and a line.
+Beyond the rules: logic errors, unhandled edge cases and error paths the spec implies, broken callers of a changed contract, race conditions, data loss, injection, secrets in code or logs, missing authorization. Each defect is a finding with rule `correctness` or `security`, a file and a line:
+
+- **Blocking**, when the change adds or touches the path: also a narrow case, a path unreachable today, or one behind a stub. The next caller or the real client reaches it.
+- **Non-blocking with `decision: true`**, when it lies outside the change: it was there before, or fixing it would touch a non-goal. The user decides whether this task fixes it.
+- The orchestrator shows the user every non-blocking `correctness` or `security` finding, so report only real defects there.
 
 ### R7 Git conventions
 
@@ -87,14 +92,19 @@ The fields (`schemas/review.schema.json`):
 - `rulesChecked`: exactly the IDs of `cw rules applicable --task <id>`.
 - `findings`: `id` (`F1`, `F2`, …), `severity` (`blocking` or `non_blocking`), `rule` (a rule ID from `rulesChecked`, or `spec`, `scope`, `git`, `correctness`, `security`), `issue`, and where it helps `file`, `line` and `suggestion`.
 - `sendAlong`: on a non-blocking finding that is cheap to fix, so the implementer fixes it along with the blocking ones. Never on a blocking finding.
+- `decision`: `true` on a finding the user must decide: an ambiguous or contradicting spec, a ticket requirement the spec leaves out, a defect outside the change, or a fix beyond the spec or its non-goals. Write the issue as the question with its options and your recommendation in `suggestion` (required). It may be blocking (no approval before the answer) or non-blocking. Unsure whether something is a defect: ask this way rather than block.
+- `carriedFrom`: the id of the finding of your previous review that this one carries over (below).
 - `summary`: one or two sentences.
 
-A style preference without a rule is never blocking; leave it out or make it a non-blocking finding. `cw` refuses an approval the state does not support (stale or failing checks, no current recheck, missing rules, scope problems, a bug fix without proof): each refusal line names what to do. Fix the review, or the facts with the named command, and save again. **Your final message is exactly the JSON fence `cw review save` printed, nothing else.**
+A style preference without a rule is never blocking; leave it out or make it a non-blocking finding. `cw` refuses an approval the state does not support (stale or failing checks, no current recheck, missing rules, scope problems, a bug fix without proof): each refusal line names what to do. Fix the review, or the facts with the named command, and save again. **Your final message is exactly the line `cw review save` printed last, nothing else.**
 
 ## Later rounds
 
 The orchestrator may message you that the implementer reports done again, or that the branch moved after your approval. Review the changes since the head it names, check every blocking finding of your previous review (the brief names that file), and run R1 to R8 again: checks and the proof recheck must be current for the new head. Save a new review; an earlier one does not count for the new round.
 
+- Carry over every finding of your previous review that still holds, with `carriedFrom` set to its id; the PR/MR's open points come from your last review only. A carried-over finding keeps the user's decision on it.
+- The brief lists the user's decisions. A finding decided `fix` is checked like a blocking one. One decided `accept` or `ticket` is carried over while it holds, without arguing it again.
+
 ## The stop check
 
-When you end your turn, a hook checks this round's review. Until `cw review save --task <id>` has succeeded after your current turn began, it holds you (at most twice) with the reason and the command to run: save, fix what it reports, and end with the printed fence. After every message from the orchestrator, the review you saved before no longer counts: save a new one before you end.
+When you end your turn, a hook checks this round's review. Until `cw review save --task <id>` has succeeded after your current turn began, it holds you (at most twice) with the reason and the command to run: save, fix what it reports, and end with the line it prints last. After every message from the orchestrator, the review you saved before no longer counts: save a new one before you end.

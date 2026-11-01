@@ -4,16 +4,17 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { listFlag } from '../lib/args.mjs';
-import { checksExitCode, runChecks } from '../lib/checks.mjs';
+import { checksExitCode, reusableChecks, runChecks } from '../lib/checks.mjs';
 import { buildMessage, isTemplated, lintRange, normalizeFlags, normalizeKeyword } from '../lib/commit.mjs';
 import { packageById } from '../lib/config.mjs';
 import { readText, writeAtomic } from '../lib/fsx.mjs';
-import { changedFiles, currentBranch, tryGit } from '../lib/git.mjs';
-import { EXIT, preconditionError, usageError } from '../lib/out.mjs';
+import { hintLines, ruleHints } from '../lib/hints.mjs';
+import { changedFiles, currentBranch, git, gitResult, tryGit } from '../lib/git.mjs';
+import { EXIT, failedError, preconditionError, usageError } from '../lib/out.mjs';
 import { resolvePacks } from '../lib/packs.mjs';
 import { applicableForTask, applicableRules, buildRulebook } from '../lib/rules.mjs';
-import { prove, recheck, singleTestTemplate } from '../lib/prove.mjs';
-import { fence, saveDevReport } from '../lib/report.mjs';
+import { prove, recheck, runSingleTest, singleTestTemplate } from '../lib/prove.mjs';
+import { finalLine, saveDevReport } from '../lib/report.mjs';
 import { testSpecRule } from '../lib/review.mjs';
 import { STEPS_TOTAL, isActive, markStep } from '../lib/task.mjs';
 import { isNoTicket } from '../lib/ticket.mjs';
@@ -36,6 +37,7 @@ function proofFix(proof) {
 
 function recheckState(result) {
   if (result.stale) return `stale (${result.stale}); not counted`;
+  if (result.holds && result.reused) return `holds (proved at this commit at ${result.reused}; not run again, --fresh runs it)`;
   if (result.holds) return 'holds';
   if (result.failedControl) return `does not hold (passes in the work tree, fails at HEAD in a clean checkout${result.failureLine ? `: ${result.failureLine}` : ''})`;
   return `does not hold (${result.failedWithout ? 'fails with the change' : 'passes without the change'})`;
@@ -97,12 +99,29 @@ function printChecks(ctx, result) {
   for (const warning of result.warnings) out.warn(warning);
   out.print(`\noverall: ${result.overall}${result.file ? ` · ${result.file}` : ''}`);
   if (result.overall === 'fail') out.print(`Fix: ${CHECKS_FIX}`);
+  if (result.hints?.length) {
+    out.print(`\nRule hints from the diff (ADR 0017): check each against its rule and fix the ones that break it; a hint is no finding:\n${hintLines(result.hints).join('\n')}`);
+  }
+}
+
+// The rule hints of the task's change. They never fail cw checks: a problem only skips them.
+function taskHints(ctx, ws, task, workTree, base) {
+  try {
+    const book = buildRulebook(ws);
+    const rules = applicableForTask(ws, task, book).rules.map((rule) => rule.id);
+    const allowed = book.packs.find((pack) => pack.id === 'core')?.options?.abbreviations ?? [];
+    return ruleHints({ workTree, base, rules, allowed });
+  } catch (error) {
+    ctx.out.warn(`rule hints skipped: ${error.message}`);
+    return [];
+  }
 }
 
 function printContext(ctx, value) {
   const { out } = ctx;
   out.print(`Task ${value.task} (${value.mode}): work tree ${value.workTree}`);
-  out.print(value.mode === 'in-place'
+  if (value.self) out.print(`Self-implementation (ADR 0019): edit files by absolute path under ${value.workTree}; run one test with cw test and commit with cw commit msg --commit; no git of your own on the task branch`);
+  else out.print(value.mode === 'in-place'
     ? `Git: ${value.git} … exactly in this form, from the project root ${value.projectRoot} (the Bash cwd stays there; never cd); file paths in it are relative to the work tree, as listed under Changed so far, or absolute`
     : 'Git: plain git … inside your worktree; no git -C and no $(…) around git');
   if (value.cwdNote) out.print(`Note: ${value.cwdNote}`);
@@ -127,6 +146,21 @@ function readBody(ctx) {
   const text = readText(file);
   if (text === null) throw usageError(`--body-file ${file} cannot be read`, 'Pass a readable file with the commit body.');
   return text;
+}
+
+// cw commit msg --commit (ADR 0019): every change of the work tree, staged and committed with the
+// message file, so the orchestrator of a self-implemented task needs no git -C of its own. A
+// node_modules link (an untracked symlink, which a "node_modules/" ignore pattern misses) stays out.
+function commitAll(workTree, file, task) {
+  if (currentBranch(workTree) !== task.branch) {
+    throw preconditionError(`${workTree} is on ${currentBranch(workTree) || 'a detached HEAD'}, not on ${task.branch}.`, `Run cw ws setup --task ${task.id} first.`);
+  }
+  git(['add', '--all', '--', '.', ':(exclude,glob)**/node_modules'], { cwd: workTree });
+  const staged = git(['diff', '--cached', '--name-only', '-z'], { cwd: workTree }).split('\0').filter(Boolean);
+  if (!staged.length) throw preconditionError(`Nothing to commit in ${workTree}.`, 'Change the files first, or leave out --commit.');
+  const result = gitResult(['commit', '--quiet', '-F', file], { cwd: workTree });
+  if (result.code !== 0) throw failedError(`git commit failed in ${workTree}: ${(result.stderr || result.stdout).trim()}`, 'Fix what the commit hook or git reports, then run cw commit msg --commit again.');
+  return { sha: git(['rev-parse', '--short=10', 'HEAD'], { cwd: workTree }), subject: git(['log', '-1', '--format=%s'], { cwd: workTree }), files: staged.length };
 }
 
 // --out is optional (default: the task dir); a file inside the work tree would be committed (Decided in P2).
@@ -188,7 +222,17 @@ export const commands = [
         changedFiles: changed,
         rules: rules.map((rule) => ({ id: rule.id, title: rule.title, severity: rule.severity, protected: rule.protected })),
         spec: existsSync(spec) ? spec : null,
-        next: [
+        self: Boolean(task.self),
+        next: task.self ? [
+          `cw test --task ${task.id} --test <package>:<file>`,
+          `cw rules applicable --task ${task.id}`,
+          `cw checks --changed --task ${task.id}`,
+          // The orchestrator commits through cw (ADR 0019): no git -C of its own.
+          `cw commit msg --task ${task.id} --summary "<Imperative summary>"${keywordFlag} --commit`,
+          `cw commit lint --task ${task.id}`,
+          `cw prove --task ${task.id} --test <package>:<file> --change <file>`,
+          `cw report save --task ${task.id} < <scratchpad>/${task.id}-report-1.json`,
+        ] : [
           `cw rules applicable --task ${task.id}`,
           `cw checks --changed --task ${task.id}`,
           // With -C <appRoot>, git reads the paths from the work tree, not from the project root.
@@ -207,9 +251,9 @@ export const commands = [
   {
     path: ['checks'],
     group: 'implementer',
-    usage: 'cw checks [--task <id>] [--changed] [--package <id>[,<id>]] [--only <check>[,<check>]]',
-    summary: "Run the checks of the changed, the given or all packages in the task's work tree",
-    flags: { task: 'string', changed: 'boolean', package: 'list', only: 'list' },
+    usage: 'cw checks [--task <id>] [--changed] [--package <id>[,<id>]] [--only <check>[,<check>]] [--fresh]',
+    summary: "Run the checks of the changed, the given or all packages in the task's work tree; a passing run of the same content counts again unless --fresh",
+    flags: { task: 'string', changed: 'boolean', package: 'list', only: 'list', fresh: 'boolean' },
     async run(ctx) {
       let ws;
       let task = null;
@@ -225,27 +269,41 @@ export const commands = [
         if (!existsSync(workTree)) throw preconditionError(`The work repo ${workTree} does not exist.`, `Clone the application into ${ws.appRoot}, or pass --task <id>.`);
         base = tryGit(['merge-base', 'HEAD', ws.config.git.defaultBase], { cwd: workTree });
       }
-      const result = await runChecks({
-        ws,
-        task,
-        workTree,
-        base,
-        changed: Boolean(ctx.flags.changed),
-        packageIds: listFlag(ctx.flags, 'package'),
-        only: listFlag(ctx.flags, 'only'),
-        onProgress: (line) => ctx.out.print(ctx.out.color.dim(line)),
-      });
+      const selection = { changed: Boolean(ctx.flags.changed), packageIds: listFlag(ctx.flags, 'package'), only: listFlag(ctx.flags, 'only') };
+      const reused = task && !ctx.flags.fresh ? reusableChecks({ ws, task, workTree, base, ...selection }) : null;
+      if (reused) ctx.out.print(`Reused ${reused.file}: these checks passed on this exact work tree content (tree ${String(reused.data.tree).slice(0, 10)}, ${reused.data.finishedAt}); --fresh runs them again.`);
+      const result = reused
+        ? { ...reused.data, reused: true }
+        : await runChecks({ ws, task, workTree, base, ...selection, onProgress: (line) => ctx.out.print(ctx.out.color.dim(line)) });
       if (task && result.overall === 'pass') stepDone(ws, task, 5, 'checks');
-      emit(ctx, result.overall === 'fail' ? { ...result, fix: CHECKS_FIX } : result, (value) => printChecks(ctx, value));
+      const hints = task ? taskHints(ctx, ws, task, workTree, base) : [];
+      emit(ctx, { ...result, ...(result.overall === 'fail' ? { fix: CHECKS_FIX } : {}), hints }, (value) => printChecks(ctx, value));
       return checksExitCode(result);
+    },
+  },
+  {
+    path: ['test'],
+    group: 'implementer',
+    usage: 'cw test --task <id> --test <package>:<file>[::<test name>]',
+    summary: "Run one test in the task's work tree with the package's single-test command, from any cwd",
+    flags: { task: 'string', test: 'string' },
+    async run(ctx) {
+      const { ws, task } = activeTask(ctx);
+      const test = requireFlag(ctx.flags, 'test', 'Pass --test <package>:<file>[::<test name>].');
+      const result = await runSingleTest({ ws, task, test });
+      emit(ctx, result, (value) => {
+        ctx.out.print(`${value.test}: ${value.passed ? 'pass' : `fail (exit ${value.exit}${value.timedOut ? ', timed out' : ''})`} · ${value.command} in ${value.cwd}`);
+        if (!value.passed) ctx.out.print(value.tail);
+      });
+      return result.passed ? EXIT.ok : EXIT.failed;
     },
   },
   {
     path: ['commit', 'msg'],
     group: 'implementer',
-    usage: 'cw commit msg --task <id> --summary <text> [--keyword <FEATURE|BUGFIX|TASK|DOCS>] [--flag <!!!|SECURITY>] [--body-file <file>|-] [--trailer "<Key: value>"]… [--out <file>]',
-    summary: 'Write the commit message of the git preset to a file for git commit -F (body from a file or stdin, trailers last)',
-    flags: { task: 'string', summary: 'string', keyword: 'string', flag: 'list', 'body-file': 'string', trailer: 'list', out: 'string' },
+    usage: 'cw commit msg --task <id> --summary <text> [--keyword <FEATURE|BUGFIX|TASK|DOCS>] [--flag <!!!|SECURITY>] [--body-file <file>|-] [--trailer "<Key: value>"]… [--out <file>] [--commit]',
+    summary: 'Write the commit message of the git preset to a file for git commit -F (body from a file or stdin, trailers last); --commit also stages every change of the work tree and commits it',
+    flags: { task: 'string', summary: 'string', keyword: 'string', flag: 'list', 'body-file': 'string', trailer: 'list', out: 'string', commit: 'boolean' },
     run(ctx) {
       const { ws, task } = activeTask(ctx);
       const preset = ws.config.git.conventions;
@@ -268,8 +326,15 @@ export const commands = [
       const file = messageFile(ctx, ws, task, workTree);
       const { message, warnings } = buildMessage(preset, { ticket: task.ticket, noTicket: isNoTicket(ws.config, task.ticket), summary, keyword, flags, body, trailers });
       writeAtomic(file, message);
-      const next = `${gitForm(ws)} commit -F ${quote(file)}`;
       for (const warning of warnings) ctx.out.warn(warning);
+      if (ctx.flags.commit) {
+        const commit = commitAll(workTree, file, task);
+        return emit(ctx, { file, message, warnings, commit, next: `cw commit lint --task ${task.id}` }, (value) => {
+          ctx.out.print(`committed ${value.commit.sha} ${value.commit.subject} on ${task.branch} (${value.commit.files} file(s))`);
+          ctx.out.print(`Next: ${value.next}`);
+        });
+      }
+      const next = `${gitForm(ws)} commit -F ${quote(file)}`;
       emit(ctx, { file, message, warnings, next }, (value) => {
         ctx.out.print(`wrote ${value.file}`);
         ctx.out.print(`Run: ${value.next} (attribution lines your instructions require go in with --trailer; never edit the file)`);
@@ -300,14 +365,14 @@ export const commands = [
   {
     path: ['prove'],
     group: 'implementer',
-    usage: 'cw prove --task <id> --test <package>:<file>[::<test name>] --change <file>[,<file>] [<file> …] | cw prove --task <id> --recheck',
-    summary: 'Prove a test fails with the change reverted and passes with it; --recheck re-runs the recorded proofs',
-    flags: { task: 'string', test: 'string', change: 'list', recheck: 'boolean' },
+    usage: 'cw prove --task <id> --test <package>:<file>[::<test name>] --change <file>[,<file>] [<file> …] | cw prove --task <id> --recheck [--fresh]',
+    summary: 'Prove a test fails with the change reverted and passes with it; --recheck re-runs the recorded proofs (a proof of this very commit counts unless --fresh)',
+    flags: { task: 'string', test: 'string', change: 'list', recheck: 'boolean', fresh: 'boolean' },
     async run(ctx) {
       const { ws, task } = activeTask(ctx);
       if (ctx.flags.recheck) {
         if (ctx.flags.test || ctx.flags.change || ctx.args.length) throw usageError('--recheck takes no --test or --change', `Run cw prove --task ${task.id} --recheck alone.`);
-        const entry = await recheck({ ws, task });
+        const entry = await recheck({ ws, task, fresh: Boolean(ctx.flags.fresh) });
         emit(ctx, entry.allHold ? entry : { ...entry, fix: recheckFix(ws, task) }, (value) => {
           if (value.empty) return ctx.out.print('no holding proofs to recheck');
           for (const result of value.results) ctx.out.print(`${result.proof} ${result.test}: ${recheckState(result)}`);
@@ -315,6 +380,7 @@ export const commands = [
         });
         return entry.allHold ? EXIT.ok : EXIT.failed;
       }
+      if (ctx.flags.fresh) throw usageError('--fresh goes with --recheck', `cw prove --task ${task.id} --recheck --fresh.`);
       const test = requireFlag(ctx.flags, 'test', 'Pass --test <package>:<file>[::<test name>].');
       const proof = await prove({ ws, task, test, change: [...listFlag(ctx.flags, 'change'), ...ctx.args] });
       if (proof.holds && proof.crossPackage) {
@@ -332,15 +398,17 @@ export const commands = [
     path: ['report', 'save'],
     group: 'implementer',
     usage: 'cw report save --task <id> < <JSON file>',
-    summary: 'Validate and save your report (JSON on stdin); end your turn with the printed JSON fence',
+    summary: 'Validate and save your report (JSON on stdin); end your turn with the line it prints last',
     flags: { task: 'string' },
     run(ctx) {
       const { ws, task } = activeTask(ctx);
       const input = readStdinJson(ctx, `cw report save --task ${task.id} < <scratchpad>/${task.id}-report-1.json`);
-      const { report } = saveDevReport({ ws, task, input });
+      const { path, report } = saveDevReport({ ws, task, input });
       for (const warning of report.warnings) ctx.out.warn(warning);
-      if (ctx.flags.json) ctx.out.data(report);
-      else ctx.out.print(fence(report));
+      if (ctx.flags.json) return ctx.out.data(report);
+      const holding = report.proofs.filter((proof) => proof.holds).length;
+      ctx.out.print(`Saved ${path}: ${report.status} · ${report.commits.length} commit(s) · checks ${report.checks.overall}${report.checks.current ? '' : ' (not current)'} · ${holding} holding proof(s)`);
+      ctx.out.print(`End your turn with exactly this line:\n${finalLine(report)}`);
     },
   },
   {

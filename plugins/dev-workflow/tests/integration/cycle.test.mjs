@@ -33,7 +33,7 @@ test('in place: classify, start, report, review, return, a follow-up review and 
   implement(fx, id, { cwd: fx.root, tree: fx.app });
   const shown = ok(fx.root, ['report', 'show', '--task', id]);
   assert.equal(shown.status, 'done');
-  assert.deepEqual(shown.next, [`cw git foreign-commits --task ${id}`, `cw task review --task ${id}`]);
+  assert.deepEqual(shown.next, [`cw task review --task ${id}`]);
   assert.ok(taskJson(fx, id).agents.implementer.shownAt);
 
   const review = ok(fx.root, ['task', 'review', '--task', id]);
@@ -61,7 +61,7 @@ test('in place: classify, start, report, review, return, a follow-up review and 
   assert.ok(followUp.sendMessage.message.includes(`Review the changes since ${head1}`));
   assert.ok(ok(fx.root, ['task', 'review', '--task', id, '--new-agent']).agentCall, '--new-agent starts a fresh reviewer');
   writeReview(fx, id, 2, 'approved', { head: app('rev-parse', branch) });
-  assert.deepEqual(ok(fx.root, ['review', 'show', '--task', id]).next, [`cw pr body --task ${id}`, `cw pr command --task ${id}`]);
+  assert.deepEqual(ok(fx.root, ['review', 'show', '--task', id]).next, [`cw pr body --task ${id} --what <file>`, `cw pr command --task ${id}`]);
   assert.equal(ok(fx.root, ['pr', 'title', '--task', id]).title, '[FEATURE] Add the mul helper');
   assert.equal(taskJson(fx, id).phase, 'deliver');
 });
@@ -148,7 +148,7 @@ test('worktree: isolation for the implementer; a new agent takes the branch over
 });
 
 test('maximum review rounds escalate; --continue and a spec change after approval restart the cycle', (t) => {
-  const fx = inPlace(t, { workflow: { maxReviewRounds: 1 } });
+  const fx = inPlace(t, { workflow: { maxReviewRounds: 1, selfImplement: [] } });
   const { run, ok } = harness(fx);
   const app = gitIn(fx.app, fx.env);
   const { id, branch } = specified(fx);

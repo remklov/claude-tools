@@ -105,6 +105,7 @@ Customizations of the compiled rulebook ([packs.md](packs.md#compiling-the-rules
 | `confirm` | array of `s`, `m`, `l`, `xl` | `["l", "xl"]` | Complexities the user confirms: `cw task start` refuses them until `cw task confirm`. |
 | `maxQuestionsPerRound` | integer 1–10 | `4` | The most AskUserQuestion questions per round in O2 Clarify; the `ticket` skill reads it from `cw config show`. |
 | `checkTimeoutMinutes` | integer 1–240 | `15` | Timeout of each check command and each single-test run of `cw prove`. |
+| `selfImplement` | array of `s`, `m`, `l`, `xl` | `["s"]` | The complexities the orchestrator implements itself, in the task's work tree, with the reviewer still an agent; `[]` delegates every task ([ADR 0019](adr/0019-orchestrator-implements-small-tasks.md)). |
 | `freshImplementerAboveTokens` | integer ≥ 0 or `null` | `150000` | `cw task return` starts a fresh implementer instead of a SendMessage when the current one's context (the input tokens of its last API call) is larger; `0` or `null` switches this off ([ADR 0012](adr/0012-fresh-implementer-above-context.md)). |
 
 ## guards

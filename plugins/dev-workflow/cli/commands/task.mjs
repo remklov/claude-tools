@@ -14,6 +14,17 @@ import { emit, loadTaskContext, requireFlag } from './common.mjs';
 
 const ROLES = ['implementer', 'reviewer'];
 
+const sessionNote = (ran) =>
+  `this session ran ${ran.join(', ')}; its context goes into every further call. For a new ticket a new session is cheaper: suggest /clear (or a new session) and the ticket command there.`;
+
+// The findings the user wants a ticket for (ADR 0015), each once: a decision a later review inherited
+// is named by its newest copy.
+function ticketDecisions(task) {
+  const decisions = task.decisions ?? [];
+  const inherited = new Set(decisions.map((decision) => decision.inheritedFrom).filter(Boolean));
+  return decisions.filter((decision) => decision.as === 'ticket' && !inherited.has(`${decision.review}.${decision.reviewRound}:${decision.finding}`));
+}
+
 // Where the playbook continues after a rebind, by phase (D3). A confirmed task (phase confirm) is past
 // O5 and ready for cw task start, so it resumes at O6.
 const RESUME = {
@@ -115,7 +126,15 @@ export const commands = [
       const ticket = ctx.flags.ticket ? normalizeTicketKey(ws.config, ctx.flags.ticket) : undefined;
       const tasks = listTasks(ws, { all: Boolean(ctx.flags.all), ticket, onWarn: (text) => ctx.out.warn(text) });
       const rows = tasks.map((task) => ({ id: task.id, ticket: task.ticket, phase: task.phase, complexity: task.complexity ?? '', owner: task.ownerSession ?? '', title: task.title }));
-      emit(ctx, { tasks: rows }, (value) => ctx.out.print(value.tasks.length ? ctx.out.table(value.tasks, ['id', 'ticket', 'phase', 'complexity', 'owner', 'title']) : 'No tasks.'));
+      // A session that ran a task carries it into every further call: a new ticket is cheaper in a new
+      // session (ADR 0014).
+      const session = ctx.env.CLAUDE_CODE_SESSION_ID;
+      const ran = session ? listTasks(ws, { all: true }).filter((task) => !isActive(task) && task.sessions?.some((entry) => entry.id === session)).map((task) => task.id) : [];
+      const value = { tasks: rows, ...(ran.length ? { sessionRan: ran, newSession: sessionNote(ran) } : {}) };
+      emit(ctx, value, (data) => {
+        ctx.out.print(data.tasks.length ? ctx.out.table(data.tasks, ['id', 'ticket', 'phase', 'complexity', 'owner', 'title']) : 'No tasks.');
+        if (data.newSession) ctx.out.print(`Note: ${data.newSession}`);
+      });
     },
   },
   {
@@ -195,7 +214,13 @@ export const commands = [
       if (ws.mode === 'in-place' && tree && currentBranch(tree) === ended.branch) {
         ctx.out.warn(`${tree} is still on ${ended.branch}; switch it back with cw task cleanup --task ${ended.id}.`);
       }
-      emit(ctx, { task: ended.id, outcome: ended.outcome, prUrl: ended.prUrl }, (value) => ctx.out.print(`Ended ${value.task}: ${value.outcome}.`));
+      const tickets = ticketDecisions(ended).map((decision) => ({ finding: `${decision.review}.${decision.reviewRound}:${decision.finding}`, rule: decision.rule, file: decision.file, line: decision.line, issue: decision.issue, note: decision.note }));
+      const newSession = 'for the next ticket or other work, a new session is cheaper: this one carries the task into every further call (/clear, or a new session).';
+      emit(ctx, { task: ended.id, outcome: ended.outcome, prUrl: ended.prUrl, tickets, newSession }, (value) => {
+        ctx.out.print(`Ended ${value.task}: ${value.outcome}.`);
+        for (const item of value.tickets) ctx.out.print(`The user wants a ticket for ${item.finding} [${item.rule}] ${item.file ? `${item.file}${item.line ? `:${item.line}` : ''}: ` : ''}${item.issue} (${item.note})`);
+        ctx.out.print(`Note: ${value.newSession}`);
+      });
     },
   },
 ];

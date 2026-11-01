@@ -75,6 +75,16 @@ function singleCommand(ws, target) {
   return singleTestCommand(runner.template, { file: target.testFile, name: target.name });
 }
 
+// One test in the task's work tree, through the package's single-test command (cw test): no cd, so the
+// orchestrator of a self-implemented task and an agent run it the same way (ADR 0019).
+export async function runSingleTest({ ws, task, test, timeoutMs }) {
+  const workTree = requireWorkTree(ws, task);
+  const target = parseTestSpec(ws.config, test);
+  const command = singleCommand(ws, target);
+  const run = await runTest(join(workTree, target.pkg.path), command, target.pkg, timeoutMs ?? ws.config.workflow.checkTimeoutMinutes * 60_000, secretValues(ws.config));
+  return { task: task.id, test: `${target.pkg.id}:${target.testPath}${target.name ? `::${target.name}` : ''}`, command, cwd: target.pkg.path, ...run, passed: run.exit === 0 };
+}
+
 // --change values as work-tree-relative paths; relative values are relative to the work tree.
 export function normalizeChange(workTree, values) {
   const real = (path) => {
@@ -349,15 +359,22 @@ export async function prove({ ws, task, test, change, timeoutMs }) {
 
 // Re-runs every proof that held against HEAD and records the outcome; nothing to do without one. A stale
 // proof is listed, not run and not counted. A failing control does not hold (the test fails at HEAD).
-export async function recheck({ ws, task, timeoutMs }) {
+// A proof cw recorded at this very commit and base, in a clean work tree, counts without a run unless
+// fresh (ADR 0018): the run at the same commit was the proof, and repeating it adds only time.
+export async function recheck({ ws, task, timeoutMs, fresh = false }) {
   const workTree = requireWorkTree(ws, task);
   const proofs = heldProofs(readProofs(ws, task).proofs);
   const entry = { round: task.round, at: new Date().toISOString(), head: headCommit(workTree), results: [], allHold: true };
   if (!proofs.length) return { ...entry, empty: true };
+  const clean = statusEntries(workTree).length === 0;
   for (const proof of proofs) {
     const stale = staleReason(workTree, task.base?.commit, proof);
     if (stale) {
       entry.results.push({ proof: proof.id, test: proof.test, stale });
+      continue;
+    }
+    if (!fresh && clean && proof.head === entry.head && proof.base === task.base?.commit) {
+      entry.results.push({ proof: proof.id, test: proof.test, failedWithout: true, passesWith: true, holds: true, reused: proof.at, failureLine: proof.failureLine });
       continue;
     }
     const target = parseTestSpec(ws.config, proof.test);

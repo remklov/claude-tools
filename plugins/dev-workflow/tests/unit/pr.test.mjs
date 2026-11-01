@@ -137,3 +137,46 @@ test('the ticket-suffix preset: the title is the oldest summary; Affected packag
   assert.match(body, /^## What & why\n\nAdd the mul helper[^]*## Affected packages\n\n- api \(`fisko-api`\)\n$/);
   assert.doesNotMatch(body, /Relates to/);
 });
+
+test('prBody: the summary of the orchestrator, several proofs by their test files, the risks of the spec and the decisions of the user', () => {
+  const spec = SPEC.replace('### Acceptance criteria', '### Risks and deploy steps\n- Set INVOICE_ROUNDING=half-even in production.\n\n### Acceptance criteria');
+  const final = { round: 2, reviewRound: 2, status: 'approved', findings: [
+    { id: 'F1', severity: 'non_blocking', rule: 'correctness', file: 'src/mul.mjs', line: 4, issue: 'NaN passes through.' },
+    { id: 'F2', severity: 'non_blocking', rule: 'security', file: 'src/mul.mjs', issue: 'Logs the raw input.' },
+    { id: 'F3', severity: 'non_blocking', rule: 'CORE-COMMENTS', file: 'src/mul.mjs', issue: 'Explain the rounding' },
+  ] };
+  const decisions = [
+    { review: 2, reviewRound: 2, finding: 'F1', as: 'accept', note: 'No caller passes NaN' },
+    { review: 2, reviewRound: 2, finding: 'F2', as: 'fix', note: 'Fix now' },
+    { review: 1, reviewRound: 1, finding: 'F1', as: 'ticket', note: 'An earlier review' },
+  ];
+  const body = prBody({
+    task: task(),
+    config,
+    spec,
+    what: '- `mul` multiplies the invoice amounts.\n- The invoice total uses it.',
+    report: { proofs: [
+      { command: 'node --test src/mul.test.mjs', testPath: 'src/mul.test.mjs', holds: true, failureLine: 'x' },
+      { command: 'node --test src/invoice.test.mjs -t total', testPath: 'src/invoice.test.mjs', holds: true },
+      { command: 'node --test src/invoice.test.mjs -t rounding', testPath: 'src/invoice.test.mjs', holds: true },
+    ] },
+    reviews: [{ round: 1, reviewRound: 1, findings: [{ id: 'F1', severity: 'non_blocking', rule: 'CORE-NAMING', issue: 'Old nit' }] }, final],
+    checks: { packages: [{ id: 'app', path: '.', checks: [
+      { name: 'typecheck', command: 'npm run typecheck', result: 'pass' },
+      { name: 'test', command: 'npm test', result: 'pass' },
+    ] }] },
+    decisions,
+  });
+  assert.match(body, /^## What & why\n\nAdd the mul helper\n\nThe calculator needs multiplication for the invoice totals\.\nSecond line of the same paragraph\.\n\n- `mul` multiplies the invoice amounts\.\n- The invoice total uses it\.\n\n## Testing/);
+  assert.ok(body.includes('- `npm run typecheck`, `npm test` in `.` (app): pass\n- Proofs: 3 tests fail without the change and pass with it (`mul.test.mjs`, `invoice.test.mjs`)'), body);
+  assert.ok(body.includes('## Risks & deploy steps\n\n- Set INVOICE_ROUNDING=half-even in production.'), body);
+  assert.ok(body.includes('## Open points\n\n- Accepted by the user (No caller passes NaN): correctness: NaN passes through. (`src/mul.mjs:4`)\n- CORE-COMMENTS: Explain the rounding (`src/mul.mjs`)\n'), body);
+  assert.ok(!body.includes('Logs the raw input') && !body.includes('Old nit') && !body.includes('An earlier review'), 'a fix decision is not open; open points come from the final review');
+});
+
+test('prBody without a summary lists at most six requirements', () => {
+  const many = SPEC.replace('- R1 Multiply two numbers\n- R2: Reject non-numbers', Array.from({ length: 8 }, (_, i) => `- R${i + 1} Requirement ${i + 1}`).join('\n'));
+  const body = prBody({ task: task('NO-TICKET'), config, spec: many });
+  assert.match(body, /- Requirement 6\n- … and 2 more requirements\n/);
+  assert.ok(!body.includes('Requirement 7'));
+});

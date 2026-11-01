@@ -22,15 +22,15 @@ export const ROLES = {
     skill: 'ticket',
     contract: null,
     commands: [
-      'doctor', 'task list', 'task new', 'ticket context', 'ticket save', 'spec save', 'spec lint', 'classify', 'task confirm', 'task start', 'task agent', 'report show',
-      'task reset', 'git foreign-commits', 'task review', 'review show', 'task return', 'pr body', 'pr command', 'pr record', 'task cleanup', 'task end',
-      'spec show', 'pr title', 'task show', 'playbook read',
+      'doctor', 'task list', 'task new', 'ticket context', 'ticket save', 'spec save', 'spec lint', 'classify', 'task confirm', 'task start', 'task agent', 'test', 'commit msg', 'task review',
+      'report show', 'task reset', 'review show', 'review decide', 'task return', 'pr body', 'pr command', 'pr record', 'task cleanup', 'task end',
+      'spec show', 'git foreign-commits', 'pr title', 'task show', 'playbook read',
     ],
   },
   implementer: {
     skill: 'implementer-playbook',
     contract: { command: 'cw report save', schema: 'schemas/dev-report.schema.json' },
-    commands: ['ws setup', 'context', 'rules applicable', 'checks', 'commit msg', 'commit lint', 'prove', 'report save', 'step', 'run'],
+    commands: ['ws setup', 'context', 'test', 'rules applicable', 'checks', 'commit msg', 'commit lint', 'prove', 'report save', 'step', 'run'],
   },
   reviewer: {
     skill: 'reviewer-playbook',

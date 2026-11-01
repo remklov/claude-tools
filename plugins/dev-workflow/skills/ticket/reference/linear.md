@@ -11,7 +11,8 @@ Tool: `mcp__<server>__get_issue`, where `<server>` is the name of the Linear ser
 ```
 
 - The result is one JSON object: `id` (the key), `title`, `description` (Markdown), `status` (the state's name), `labels`, `assignee` (a name), `url`, and more you do not need.
-- No other Linear calls: no search, no comments, no lists.
+- The comments: where the server offers a comments tool for an issue (its name ends in `list_comments`), one call for this issue; scope agreed in a comment belongs to the requirement (ADR 0016). Without such a tool, tell the user that the comments were not read.
+- No other Linear calls: no search, no lists.
 
 ## When Linear is not available
 
@@ -32,6 +33,7 @@ Tool: `mcp__<server>__get_issue`, where `<server>` is the name of the Linear ser
 | `status` | `status` | |
 | `assignee` | `assignee` | `null` when unassigned |
 | `url` | `url` | https; required when `source` is `linear` |
+| `comments` | the comments call: `{ "author", "created", "body" }` each | leave out when there are none |
 | `context` | the context file `cw ticket context` named | only when it exists and you read it |
 | `source` | `"linear"` | `"pasted"` for a pasted ticket, `"notes"` for NO-TICKET (O3) |
 

@@ -76,7 +76,10 @@ export function newTask(ws, { ticket, title, type, slug, branch, ownerSession, b
     branchPreexisted: false,
     previousComplexity: null,
     specChanged: false,
+    specRevised: false,
     returnedWith: null,
+    decisions: [],
+    self: false,
     agents: { implementer: null, reviewer: null },
     stopBlocks: {},
     steps: { done: 0, total: STEPS_TOTAL, note: '' },
@@ -141,6 +144,9 @@ export function rebuildState(ws, { now } = {}) {
       agents: { implementer: task.agents.implementer?.id ?? null, reviewer: task.agents.reviewer?.id ?? null },
       descriptions: { implementer: task.agents.implementer?.description ?? null, reviewer: task.agents.reviewer?.description ?? null },
       steps: task.steps,
+      // A task the orchestrator implements itself: G-ORCH-EDIT lets it edit its work tree (ADR 0019).
+      self: Boolean(task.self),
+      workTree: task.workTree ?? null,
       prUrl: task.prUrl,
       updatedAt: task.updatedAt,
       endedAt: task.endedAt,
@@ -245,7 +251,7 @@ export function tasksAwaitingAgent(ws, { sessionId, role, agentType }) {
   return listTasks(ws).filter((task) =>
     task.ownerSession === sessionId
     && task.phase === phase
-    && (role !== 'implementer' || agentType === implementerAgentType(task.complexity))
+    && (role !== 'implementer' || (!task.self && agentType === implementerAgentType(task.complexity)))
     && (!task.agents[role] || task.agents[role].round !== task.round || !task.agents[role].startedAt));
 }
 

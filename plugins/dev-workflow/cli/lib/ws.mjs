@@ -8,6 +8,7 @@ import { branchExists, currentBranch, git, gitResult, headCommit, statusEntries,
 import { preconditionError } from './out.mjs';
 import { markStep, setResumeBranch, updateTask } from './task.mjs';
 import { resolveGitDirs, workTreeOf } from './workspace.mjs';
+import { addSelfWorktree, linkPackageModules, mainCheckout, selfWorktreePath, worktreeHolding } from './worktree.mjs';
 
 const AGENT_BRANCH = /^worktree-agent-/;
 const BLOCKED = 'Report blocked';
@@ -134,13 +135,33 @@ function setupWorktree(ws, task, cwd) {
   return { workTree, base: task.base, created: true, agentBranch: branch || null };
 }
 
+// Worktree mode, a task the orchestrator implements itself (ADR 0019): cw adds the worktree from the
+// main checkout, on a new task branch at base.commit or on the kept branch, and links node_modules.
+// Run again, it confirms the recorded worktree.
+function setupSelfWorktree(ws, task) {
+  requireBase(task);
+  const mainRoot = mainCheckout(ws);
+  const path = selfWorktreePath(ws, task);
+  if (existsSync(path) && currentBranch(path) === task.branch) return { workTree: realpathSync(path), base: task.base, created: false, agentBranch: null };
+  if (existsSync(path)) {
+    throw preconditionError(`${path} exists and is not on ${task.branch}.`, 'Ask the user: it is no work tree of this task; they move or remove it, then run cw ws setup again.');
+  }
+  const exists = branchExists(mainRoot, task.branch);
+  if (exists && !task.resumeBranch) requireNoTaskBranch(mainRoot, task);
+  const holder = exists ? worktreeHolding(mainRoot, task.branch) : null;
+  if (holder) throw preconditionError(`${task.branch} is checked out in ${holder}.`, 'Ask the user: git keeps a branch in one work tree only; switch that work tree away from it, then run cw ws setup again.');
+  addSelfWorktree(mainRoot, path, { branch: task.branch, base: task.base.commit, existing: exists });
+  linkPackageModules(ws, mainRoot, path);
+  return { workTree: realpathSync(path), base: task.base, created: !exists, agentBranch: null };
+}
+
 // Creates (or confirms) the task branch in the task's work tree and records workTree, base and the
 // agent branch. Idempotent: a work tree already on the task branch is left as it is.
 export function setupWorkTree(ws, task, { cwd }) {
   if (task.phase !== 'implement') {
     throw preconditionError(`cw ws setup needs phase implement; task ${task.id} is in ${task.phase}.`, `${BLOCKED}; the orchestrator runs cw task start --task ${task.id}.`);
   }
-  const result = ws.mode === 'in-place' ? setupInPlace(ws, task) : setupWorktree(ws, task, cwd);
+  const result = ws.mode === 'in-place' ? setupInPlace(ws, task) : task.self ? setupSelfWorktree(ws, task) : setupWorktree(ws, task, cwd);
   updateTask(ws, task.id, (current) => {
     current.workTree = result.workTree;
     current.base = result.base;

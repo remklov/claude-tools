@@ -154,6 +154,8 @@ export function withDefaults(raw) {
       checkTimeoutMinutes: raw.workflow?.checkTimeoutMinutes ?? 15,
       // null (and 0) switch the rule off, so only a missing key takes the default.
       freshImplementerAboveTokens: raw.workflow?.freshImplementerAboveTokens === undefined ? DEFAULT_FRESH_IMPLEMENTER_ABOVE_TOKENS : raw.workflow.freshImplementerAboveTokens,
+      // The complexities the orchestrator implements itself, with the reviewer still an agent (ADR 0019).
+      selfImplement: raw.workflow?.selfImplement ?? ['s'],
     },
     guards: { ports: raw.guards?.ports ?? [], commands: raw.guards?.commands ?? [], devServer: raw.guards?.devServer ?? 'allowed' },
     complexity: { escalate: raw.complexity?.escalate ?? [] },

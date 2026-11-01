@@ -4,11 +4,13 @@ Goal: the approved branch is pushed and has a PR/MR (or the user decided against
 
 ## 1. The PR/MR body
 
+Write What & why's summary of the change, three to six lines in the reader's words (what changed and where; no headings), with the Write tool to a new file in your scratchpad directory, then:
+
 ```bash
-cw pr body --task <id>
+cw pr body --task <id> --what <scratchpad>/<id>-what-1.md
 ```
 
-It writes the body from the spec, the reports and the review, and prints it. Check it against the git preset: "Testing" lists only what was actually verified; "Open points" holds the open non-blocking findings and the report's open points; no attribution lines unless the user's own instructions require them. To correct it, write the whole corrected body (only the preset's sections; `cw` keeps the trailers) to a new file in your scratchpad directory and pass it on stdin:
+It writes the body around it from the spec, the report and the final review, and prints it: the ticket and the spec's context lead What & why; Testing names the passing checks per package and the holding proofs; Risks & deploy steps take the spec's Risks and deploy steps and the report's risks; Open points hold the report's open points and the final review's non-blocking findings with the user's decisions. Check it against the git preset: Testing lists only what was verified; no attribution lines unless the user's own instructions require them. Only when something is wrong, write the whole corrected body (only the preset's sections; `cw` keeps the trailers) to a new file in your scratchpad directory and pass it on stdin:
 
 ```bash
 cw pr body --task <id> --stdin < <scratchpad>/<id>-pr-body-1.md

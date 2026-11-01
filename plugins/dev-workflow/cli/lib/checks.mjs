@@ -117,6 +117,21 @@ export async function runChecks({ ws, task = null, workTree, base = null, change
   return result;
 }
 
+// A recorded passing run that covers the same work tree content with the same selection and the same
+// check commands (ADR 0018): cw ran it, and the tree id pins every file, so a second run of the same
+// commands on the same content adds only time. The reviewer's checks of an unchanged branch reuse the
+// implementer's last run. null when there is none; --fresh skips it.
+export function reusableChecks({ ws, task, workTree, base = null, changed = false, packageIds = [], only = [] }) {
+  const tree = workTreeId(workTree);
+  const { selection, packages } = selectPackages(ws.config, { files: changedFiles(workTree, base), changed, packageIds });
+  if (!packages.length) return null;
+  const commandsOf = (pkg) => Object.entries(pkg.checks).filter(([name]) => !only.length || only.includes(name)).map(([name, command]) => `${name}=${command}`).join('\n');
+  const wanted = packages.map((pkg) => `${pkg.id}\n${commandsOf(pkg)}`).join('\n\n');
+  const same = (data) => data.packages.map((pkg) => `${pkg.id}\n${pkg.checks.map((check) => `${check.name}=${check.command}`).join('\n')}`).join('\n\n') === wanted;
+  return listChecks(ws, task).find(({ data }) => data.tree === tree && data.overall === 'pass' && data.selection === selection
+    && [...data.only].sort().join(',') === [...only].sort().join(',') && same(data)) ?? null;
+}
+
 export const checksExitCode = (result) => (result.overall === 'pass' || result.overall === 'none' ? 0 : 1);
 
 // The task's checks results, newest first, as { file, data }.
