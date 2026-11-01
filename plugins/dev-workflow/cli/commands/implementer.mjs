@@ -4,7 +4,7 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { listFlag } from '../lib/args.mjs';
-import { checksExitCode, runChecks } from '../lib/checks.mjs';
+import { checksExitCode, reusableChecks, runChecks } from '../lib/checks.mjs';
 import { buildMessage, isTemplated, lintRange, normalizeFlags, normalizeKeyword } from '../lib/commit.mjs';
 import { packageById } from '../lib/config.mjs';
 import { readText, writeAtomic } from '../lib/fsx.mjs';
@@ -37,6 +37,7 @@ function proofFix(proof) {
 
 function recheckState(result) {
   if (result.stale) return `stale (${result.stale}); not counted`;
+  if (result.holds && result.reused) return `holds (proved at this commit at ${result.reused}; not run again, --fresh runs it)`;
   if (result.holds) return 'holds';
   if (result.failedControl) return `does not hold (passes in the work tree, fails at HEAD in a clean checkout${result.failureLine ? `: ${result.failureLine}` : ''})`;
   return `does not hold (${result.failedWithout ? 'fails with the change' : 'passes without the change'})`;
@@ -224,9 +225,9 @@ export const commands = [
   {
     path: ['checks'],
     group: 'implementer',
-    usage: 'cw checks [--task <id>] [--changed] [--package <id>[,<id>]] [--only <check>[,<check>]]',
-    summary: "Run the checks of the changed, the given or all packages in the task's work tree",
-    flags: { task: 'string', changed: 'boolean', package: 'list', only: 'list' },
+    usage: 'cw checks [--task <id>] [--changed] [--package <id>[,<id>]] [--only <check>[,<check>]] [--fresh]',
+    summary: "Run the checks of the changed, the given or all packages in the task's work tree; a passing run of the same content counts again unless --fresh",
+    flags: { task: 'string', changed: 'boolean', package: 'list', only: 'list', fresh: 'boolean' },
     async run(ctx) {
       let ws;
       let task = null;
@@ -242,16 +243,12 @@ export const commands = [
         if (!existsSync(workTree)) throw preconditionError(`The work repo ${workTree} does not exist.`, `Clone the application into ${ws.appRoot}, or pass --task <id>.`);
         base = tryGit(['merge-base', 'HEAD', ws.config.git.defaultBase], { cwd: workTree });
       }
-      const result = await runChecks({
-        ws,
-        task,
-        workTree,
-        base,
-        changed: Boolean(ctx.flags.changed),
-        packageIds: listFlag(ctx.flags, 'package'),
-        only: listFlag(ctx.flags, 'only'),
-        onProgress: (line) => ctx.out.print(ctx.out.color.dim(line)),
-      });
+      const selection = { changed: Boolean(ctx.flags.changed), packageIds: listFlag(ctx.flags, 'package'), only: listFlag(ctx.flags, 'only') };
+      const reused = task && !ctx.flags.fresh ? reusableChecks({ ws, task, workTree, base, ...selection }) : null;
+      if (reused) ctx.out.print(`Reused ${reused.file}: these checks passed on this exact work tree content (tree ${String(reused.data.tree).slice(0, 10)}, ${reused.data.finishedAt}); --fresh runs them again.`);
+      const result = reused
+        ? { ...reused.data, reused: true }
+        : await runChecks({ ws, task, workTree, base, ...selection, onProgress: (line) => ctx.out.print(ctx.out.color.dim(line)) });
       if (task && result.overall === 'pass') stepDone(ws, task, 5, 'checks');
       const hints = task ? taskHints(ctx, ws, task, workTree, base) : [];
       emit(ctx, { ...result, ...(result.overall === 'fail' ? { fix: CHECKS_FIX } : {}), hints }, (value) => printChecks(ctx, value));
@@ -318,14 +315,14 @@ export const commands = [
   {
     path: ['prove'],
     group: 'implementer',
-    usage: 'cw prove --task <id> --test <package>:<file>[::<test name>] --change <file>[,<file>] [<file> …] | cw prove --task <id> --recheck',
-    summary: 'Prove a test fails with the change reverted and passes with it; --recheck re-runs the recorded proofs',
-    flags: { task: 'string', test: 'string', change: 'list', recheck: 'boolean' },
+    usage: 'cw prove --task <id> --test <package>:<file>[::<test name>] --change <file>[,<file>] [<file> …] | cw prove --task <id> --recheck [--fresh]',
+    summary: 'Prove a test fails with the change reverted and passes with it; --recheck re-runs the recorded proofs (a proof of this very commit counts unless --fresh)',
+    flags: { task: 'string', test: 'string', change: 'list', recheck: 'boolean', fresh: 'boolean' },
     async run(ctx) {
       const { ws, task } = activeTask(ctx);
       if (ctx.flags.recheck) {
         if (ctx.flags.test || ctx.flags.change || ctx.args.length) throw usageError('--recheck takes no --test or --change', `Run cw prove --task ${task.id} --recheck alone.`);
-        const entry = await recheck({ ws, task });
+        const entry = await recheck({ ws, task, fresh: Boolean(ctx.flags.fresh) });
         emit(ctx, entry.allHold ? entry : { ...entry, fix: recheckFix(ws, task) }, (value) => {
           if (value.empty) return ctx.out.print('no holding proofs to recheck');
           for (const result of value.results) ctx.out.print(`${result.proof} ${result.test}: ${recheckState(result)}`);
@@ -333,6 +330,7 @@ export const commands = [
         });
         return entry.allHold ? EXIT.ok : EXIT.failed;
       }
+      if (ctx.flags.fresh) throw usageError('--fresh goes with --recheck', `cw prove --task ${task.id} --recheck --fresh.`);
       const test = requireFlag(ctx.flags, 'test', 'Pass --test <package>:<file>[::<test name>].');
       const proof = await prove({ ws, task, test, change: [...listFlag(ctx.flags, 'change'), ...ctx.args] });
       if (proof.holds && proof.crossPackage) {

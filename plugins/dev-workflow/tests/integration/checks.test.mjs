@@ -87,6 +87,11 @@ test('in-place: from ws setup to a saved report, with cw run from the outer repo
   assert.deepEqual(results[0].json().changedFiles, ['src/mul.mjs', 'src/mul.test.mjs']);
   assert.equal(results[0].json().overall, 'pass');
   assert.equal(readTask(ws, id).steps.done, 5);
+  // The first run passed on this content: the others reused it (ADR 0018), and --fresh runs again.
+  assert.deepEqual(results.map((result) => Boolean(result.json().reused)), [false, true, true, true]);
+  assert.match(run(fx.root, ['checks', '--changed']).stdout, /^Reused \S+checks-\d{8}T\d{9}Z\.json: these checks passed on this exact work tree content \(tree \w{10}, [^)]+\); --fresh runs them again\./);
+  assert.equal(run(fx.root, ['checks', '--changed', '--only', 'test', '--json']).json().reused, undefined, 'another selection runs');
+  assert.equal(run(fx.root, ['checks', '--changed', '--fresh', '--json']).json().reused, undefined);
 
   const early = run(fx.root, ['report', 'save'], { input: JSON.stringify(REPORT) });
   assert.equal(early.code, 1);

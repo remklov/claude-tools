@@ -21,5 +21,6 @@ The architecture decisions D1 to D12 of the first build are in `docs/PLAN.md` §
 | [0015](0015-user-decides-review-findings.md) | The user decides on defects the review does not block (`decision`, `cw review decide`, `carriedFrom`) |
 | [0016](0016-intake-checks.md) | The intake checks of a kickoff plan: comments, links and earlier work on the key, Risks and deploy steps, the ticket in the review |
 | [0017](0017-rule-hints.md) | `cw checks` prints rule hints from the diff |
+| [0018](0018-verify-unchanged-state-once.md) | The review verifies an unchanged state once: `cw checks` reuses a passing run of the same content, `cw prove --recheck` a proof of the same commit (`--fresh` runs again) |
 
 A new record takes the next number, the format of the existing ones and a line in this table.

@@ -349,15 +349,22 @@ export async function prove({ ws, task, test, change, timeoutMs }) {
 
 // Re-runs every proof that held against HEAD and records the outcome; nothing to do without one. A stale
 // proof is listed, not run and not counted. A failing control does not hold (the test fails at HEAD).
-export async function recheck({ ws, task, timeoutMs }) {
+// A proof cw recorded at this very commit and base, in a clean work tree, counts without a run unless
+// fresh (ADR 0018): the run at the same commit was the proof, and repeating it adds only time.
+export async function recheck({ ws, task, timeoutMs, fresh = false }) {
   const workTree = requireWorkTree(ws, task);
   const proofs = heldProofs(readProofs(ws, task).proofs);
   const entry = { round: task.round, at: new Date().toISOString(), head: headCommit(workTree), results: [], allHold: true };
   if (!proofs.length) return { ...entry, empty: true };
+  const clean = statusEntries(workTree).length === 0;
   for (const proof of proofs) {
     const stale = staleReason(workTree, task.base?.commit, proof);
     if (stale) {
       entry.results.push({ proof: proof.id, test: proof.test, stale });
+      continue;
+    }
+    if (!fresh && clean && proof.head === entry.head && proof.base === task.base?.commit) {
+      entry.results.push({ proof: proof.id, test: proof.test, failedWithout: true, passesWith: true, holds: true, reused: proof.at, failureLine: proof.failureLine });
       continue;
     }
     const target = parseTestSpec(ws.config, proof.test);

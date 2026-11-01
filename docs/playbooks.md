@@ -82,7 +82,7 @@ The misclassified reset (`cw task reset`) removes an implementer's empty start (
 | Step | What | `cw` |
 |---|---|---|
 | R1 | Scope: diff stat, unowned files, foreign commits, uncommitted changes and added `node_modules` paths (blocking), non-goal hints, pack scope scripts (blocking unless a non-blocking `scope` finding names the script and says why it is accepted) | `review scope` |
-| R2 | The checks in the task's work tree; a failing check is blocking | `checks --changed` |
+| R2 | The checks in the task's work tree, reusing a passing run of the same content ([ADR 0018](adr/0018-verify-unchanged-state-once.md)); a failing check is blocking | `checks --changed [--fresh]` |
 | R3 | The ticket against the spec and the diff in both directions (a gap or a contradiction is a `spec` finding for the user's decision); every acceptance criterion with named evidence; the recorded proofs re-run; a criterion without a test, or a test that does not fail without the change, is a blocking CORE-TEST-SPEC finding; a manual check of the Definition of done needs no test and is no finding | `prove --recheck` |
 | R4 | Each applicable rule checked; `rulesChecked` equals that set | `rules applicable` |
 | R5 | The reviewer procedures from the brief | `run <pack>:<script>` where a procedure names one |
