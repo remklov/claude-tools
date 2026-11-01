@@ -30,16 +30,16 @@ Call the Agent tool with that JSON as it is:
 
 If the call is refused or fails, run it again exactly as printed once; if it still fails, tell the user what the error says.
 
-## 3. Record the agent
+## 3. The agent's id
 
-The Agent result names the agent id. Record it for later SendMessages:
+The SubagentStart hook records the agent's id for later SendMessages (ADR 0014): there is nothing to record. Only when a later command warns that no implementer is recorded (the hook records none while several tasks of this session wait for one), record it from the Agent result:
 
 ```bash
 cw task agent --task <id> --role implementer --id <agentId>
 ```
 
-Then O7, once the implementer has ended: `cw report show --task <id>`. Do not judge the work from the Agent result text; it may only point to a handback.
+Then O7, once the implementer has ended: `cw task review --task <id>`. Do not judge the work from the Agent result text; the agent ends with one status line.
 
 ## Later rounds
 
-`cw task return`, `cw task review` and `cw task start --task <id> --new-agent` print either a SendMessage for the same agent or a fresh Agent call. A fresh Agent call is always followed by `cw task agent --task <id> --role <implementer|reviewer> --id <agentId>` for its role; a SendMessage keeps the recorded id.
+`cw task return`, `cw task review` and `cw task start --task <id> --new-agent` print either a SendMessage for the same agent or a fresh Agent call; the hook records a fresh agent too, and a SendMessage keeps the recorded id.

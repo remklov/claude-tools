@@ -69,7 +69,7 @@ function returnedInputs(ws, task) {
   const returned = task.returnedWith;
   if (!returned) return { findings: [], decision: null };
   const review = returned.review ? readRoundFile(ws, task, 'review', returned.review).data : null;
-  return { findings: review ? findingsToFix(review) : [], decision: returned.mode === 'continue' ? returned.note : null };
+  return { findings: review ? findingsToFix(review, task.decisions) : [], decision: returned.mode === 'continue' ? returned.note : null };
 }
 
 // The newest report up to the task's round ({ path, data, round }), or null.

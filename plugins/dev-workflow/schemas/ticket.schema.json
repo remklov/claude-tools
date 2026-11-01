@@ -12,6 +12,32 @@
     "assignee": { "type": ["string", "null"] },
     "url": { "type": "string", "pattern": "^https://" },
     "source": { "enum": ["jira", "linear", "local", "pasted", "notes"] },
+    "comments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["body"],
+        "properties": {
+          "author": { "type": "string" },
+          "created": { "type": "string" },
+          "body": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key"],
+        "properties": {
+          "type": { "type": "string" },
+          "key": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string" }
+        }
+      }
+    },
     "path": { "type": "string", "minLength": 1 },
     "context": { "type": "string", "minLength": 1 }
   }

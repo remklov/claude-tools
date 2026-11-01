@@ -41,7 +41,7 @@ test('in place: above the threshold task return prints a fresh Agent call with t
   assert.equal(back.agentCall.subagent_type, 'dev-workflow:implementer-s');
   assert.equal(back.freshAgent, 'the context of impl-1 is 451k tokens, above workflow.freshImplementerAboveTokens (150k)');
   assert.deepEqual([back.context.tokens, back.context.limit, back.context.over], [451_000, 150_000, true]);
-  assert.deepEqual(back.next, [`cw task agent --task ${id} --role implementer --id <the agentId the Agent tool returned>`, `cw report show --task ${id}`]);
+  assert.deepEqual(back.next, [`cw task review --task ${id}`]);
 
   // The brief: spec, handover, findings and the branch state with its files, but no diff.
   const brief = readFileSync(back.brief, 'utf8');

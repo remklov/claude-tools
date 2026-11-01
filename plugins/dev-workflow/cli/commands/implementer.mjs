@@ -8,12 +8,13 @@ import { checksExitCode, runChecks } from '../lib/checks.mjs';
 import { buildMessage, isTemplated, lintRange, normalizeFlags, normalizeKeyword } from '../lib/commit.mjs';
 import { packageById } from '../lib/config.mjs';
 import { readText, writeAtomic } from '../lib/fsx.mjs';
+import { hintLines, ruleHints } from '../lib/hints.mjs';
 import { changedFiles, currentBranch, tryGit } from '../lib/git.mjs';
 import { EXIT, preconditionError, usageError } from '../lib/out.mjs';
 import { resolvePacks } from '../lib/packs.mjs';
 import { applicableForTask, applicableRules, buildRulebook } from '../lib/rules.mjs';
 import { prove, recheck, singleTestTemplate } from '../lib/prove.mjs';
-import { fence, saveDevReport } from '../lib/report.mjs';
+import { finalLine, saveDevReport } from '../lib/report.mjs';
 import { testSpecRule } from '../lib/review.mjs';
 import { STEPS_TOTAL, isActive, markStep } from '../lib/task.mjs';
 import { isNoTicket } from '../lib/ticket.mjs';
@@ -97,6 +98,22 @@ function printChecks(ctx, result) {
   for (const warning of result.warnings) out.warn(warning);
   out.print(`\noverall: ${result.overall}${result.file ? ` · ${result.file}` : ''}`);
   if (result.overall === 'fail') out.print(`Fix: ${CHECKS_FIX}`);
+  if (result.hints?.length) {
+    out.print(`\nRule hints from the diff (ADR 0017): check each against its rule and fix the ones that break it; a hint is no finding:\n${hintLines(result.hints).join('\n')}`);
+  }
+}
+
+// The rule hints of the task's change. They never fail cw checks: a problem only skips them.
+function taskHints(ctx, ws, task, workTree, base) {
+  try {
+    const book = buildRulebook(ws);
+    const rules = applicableForTask(ws, task, book).rules.map((rule) => rule.id);
+    const allowed = book.packs.find((pack) => pack.id === 'core')?.options?.abbreviations ?? [];
+    return ruleHints({ workTree, base, rules, allowed });
+  } catch (error) {
+    ctx.out.warn(`rule hints skipped: ${error.message}`);
+    return [];
+  }
 }
 
 function printContext(ctx, value) {
@@ -236,7 +253,8 @@ export const commands = [
         onProgress: (line) => ctx.out.print(ctx.out.color.dim(line)),
       });
       if (task && result.overall === 'pass') stepDone(ws, task, 5, 'checks');
-      emit(ctx, result.overall === 'fail' ? { ...result, fix: CHECKS_FIX } : result, (value) => printChecks(ctx, value));
+      const hints = task ? taskHints(ctx, ws, task, workTree, base) : [];
+      emit(ctx, { ...result, ...(result.overall === 'fail' ? { fix: CHECKS_FIX } : {}), hints }, (value) => printChecks(ctx, value));
       return checksExitCode(result);
     },
   },
@@ -332,15 +350,17 @@ export const commands = [
     path: ['report', 'save'],
     group: 'implementer',
     usage: 'cw report save --task <id> < <JSON file>',
-    summary: 'Validate and save your report (JSON on stdin); end your turn with the printed JSON fence',
+    summary: 'Validate and save your report (JSON on stdin); end your turn with the line it prints last',
     flags: { task: 'string' },
     run(ctx) {
       const { ws, task } = activeTask(ctx);
       const input = readStdinJson(ctx, `cw report save --task ${task.id} < <scratchpad>/${task.id}-report-1.json`);
-      const { report } = saveDevReport({ ws, task, input });
+      const { path, report } = saveDevReport({ ws, task, input });
       for (const warning of report.warnings) ctx.out.warn(warning);
-      if (ctx.flags.json) ctx.out.data(report);
-      else ctx.out.print(fence(report));
+      if (ctx.flags.json) return ctx.out.data(report);
+      const holding = report.proofs.filter((proof) => proof.holds).length;
+      ctx.out.print(`Saved ${path}: ${report.status} · ${report.commits.length} commit(s) · checks ${report.checks.overall}${report.checks.current ? '' : ' (not current)'} · ${holding} holding proof(s)`);
+      ctx.out.print(`End your turn with exactly this line:\n${finalLine(report)}`);
     },
   },
   {

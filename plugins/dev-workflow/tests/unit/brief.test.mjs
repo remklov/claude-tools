@@ -81,7 +81,7 @@ test('the implementer brief carries the spec, packages, rules, procedures, guard
     task,
     role: 'implementer',
     specText: '## Task: Add the version endpoint\n',
-    ticket: { key: 'APP-42', summary: 'Version endpoint', url: 'https://example.atlassian.net/browse/APP-42', savedAt: '2026-10-19T10:00:00.000Z', acceptanceCriteria: ['200 with version'] },
+    ticket: { key: 'APP-42', summary: 'Version endpoint', url: 'https://example.atlassian.net/browse/APP-42', savedAt: '2026-10-19T10:00:00.000Z', acceptanceCriteria: ['200 with version'], comments: [{ author: 'Ana', created: '2026-10-18', body: 'Also return the git sha.\nAgreed in the call.' }], links: [{ type: 'is blocked by', key: 'APP-40', summary: 'Release script' }] },
     packages: [config.packages[1]],
     rules: [{ id: 'CORE-SECRETS', title: 'No secrets in code', severity: 'blocking', protected: true }],
     procedures: [{ name: 'express-route', origin: 'pack:express', description: 'New route', body: '1. Register it in createApp().' }],
@@ -92,13 +92,15 @@ test('the implementer brief carries the spec, packages, rules, procedures, guard
     '# Brief: implementer · APP-42 · Add the version endpoint',
     '- Mode: in-place · work tree `/p/app`: run git as `git -C app …`, exactly in this form, from the project root (the Bash cwd stays there; never `cd`); use absolute paths for files.',
     '## Ticket (snapshot 2026-10-19T10:00:00.000Z)',
+    'Comments:\n- Ana, 2026-10-18: Also return the git sha. Agreed in the call.',
+    'Linked issues:\n- is blocked by APP-40: Release script',
     '| api | packages/api | backend | test, lint |',
     '- CORE-SECRETS — No secrets in code (blocking, protected); full text: cw rules show CORE-SECRETS',
     '### express-route (pack:express) — New route',
     '1. Register it in createApp().',
     '## Guardrails for complexity M',
     '## Review findings to fix',
-    'Your final message is exactly the JSON fence `cw report save --task APP-42__feature__version-endpoint` prints.',
+    'Your final message is exactly the line `cw report save --task APP-42__feature__version-endpoint` prints last.',
   ]) assert.ok(brief.includes(expected), expected);
   assert.ok(!brief.includes('\n\n\n'));
   const spacedConfig = { ...config, workspace: { mode: 'in-place', appRoot: 'my app' } };

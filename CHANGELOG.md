@@ -4,6 +4,23 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- dev-workflow: `cw review decide --task <id> --finding <F>[,<F>] --as fix|ticket|accept --note "<answer>"` records the user's decision on a review finding. `cw review show` marks the findings that need one: those the reviewer set `decision` on, and every non-blocking `correctness` or `security` finding. `cw task return` refuses a review that requested changes, and every `pr` command an approval, while one is undecided; after an approval `cw task return` sends the findings the user decided to fix. `cw task end` lists the ones the user wants a ticket for (ADR 0015).
+- dev-workflow: review findings take `decision` (with the recommendation in `suggestion`) and `carriedFrom` (a finding of the previous review, which `cw review save` checks); a carried-over finding keeps the user's decision (ADR 0015).
+- dev-workflow: `cw checks --task` prints rule hints from the diff: whitespace-only hunks (CORE-SCOPE), abbreviations outside the allowed list and booleans without `is`/`has`/`can`/`should` (CORE-NAMING), new module-private helpers with fewer than three references (CORE-SIMPLICITY). They are no findings and never fail the command (ADR 0017).
+- dev-workflow: `cw pr body --what <file>` puts the orchestrator's summary of the change into What & why (ADR 0014).
+- dev-workflow: the spec template has the section Risks and deploy steps, which the PR/MR's Risks & deploy steps take over; `cw spec lint` warns when it is missing. The ticket snapshot takes `comments` and `links`, and the briefs show them; the Jira read asks for the fields `comment` and `issuelinks`. `cw ticket context` lists the branches and commits that name the key (ADR 0016).
+
+### Changed
+
+- dev-workflow: **breaking for the playbooks:** agents end with the one line `cw report save` or `cw review save` prints last (`dev-workflow report <id> round <n>: <status>`) instead of the JSON fence; the SubagentStop gate reads its status and still accepts a fence (ADR 0014).
+- dev-workflow: `cw task review` after an implementer round prints the done report and checks foreign commits itself (exit 1 with the fix), so O7 and O8 need one call; every delegation's `Next:` is `cw task review` or `cw review show`. The orchestrator no longer records agents with `cw task agent`: the SubagentStart hook does, and `cw report show`, `cw task review` and `cw review show` name `cw task agent` only when none is recorded (ADR 0014).
+- dev-workflow: the PR/MR body lists at most six requirements without `--what`, the checks in one line per package, several proofs by their test files, and the open points of the final review only, with the user's decisions (ADR 0014, ADR 0015).
+- dev-workflow: the reviewer blocks a defect on a path the change touches also when it is narrow, unreachable today or behind a stub, compares the ticket with the spec and the diff, and carries over the findings of its previous review that still hold (ADR 0015, ADR 0016).
+- dev-workflow: `cw spec save` is allowed while the review requests changes, so the user's answers can change the spec before the round goes back.
+- dev-workflow: O1 asks about earlier work on the key and suggests a new session when this one ran a task; `cw task list` and `cw task end` say so. O2 asks about contradicting criteria and the operational fallout (ADR 0014, ADR 0016).
+
 ## agents-progress 0.2.0 - 2026-10-26
 
 ### Changed

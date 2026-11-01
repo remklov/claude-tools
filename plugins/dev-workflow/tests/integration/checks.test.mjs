@@ -133,7 +133,9 @@ test('in-place: from ws setup to a saved report, with cw run from the outer repo
   assert.equal(existsSync(taskPath(ws, id, 'report-1.json')), false, 'nothing was written');
   const saved = run(join(fx.app, 'src'), ['report', 'save'], { input: `My report:\n\`\`\`json\n${JSON.stringify({ ...REPORT, rulesChecked })}\n\`\`\`\n` });
   assert.equal(saved.code, 0, saved.stderr);
-  assert.match(saved.stdout, /^```json\n/);
+  // The agent ends with the one line cw prints last (ADR 0014), not with the saved JSON.
+  assert.match(saved.stdout, /^Saved \S+report-1\.json: done · 1 commit\(s\) · checks pass/);
+  assert.equal(saved.stdout.trim().split('\n').at(-1), `dev-workflow report ${id} round 1: done`);
   const report = readJson(taskPath(ws, id, 'report-1.json'));
   assert.deepEqual([report.rulesChecked, report.rulesApplicable], [rulesChecked, rulesChecked]);
   assert.ok(report.savedAt > startedAt);

@@ -3,6 +3,7 @@
 // / cw review show stamp shownAt), so an agent continued with SendMessage saves again. At most
 // MAX_STOP_BLOCKS blocks per agent id; last_assistant_message is only a cross-check when present (the
 // Desktop app leaves it out, S7).
+import { finalLineStatus } from '../../cli/lib/report.mjs';
 import { listTasks, readRoundFile } from '../../cli/lib/task.mjs';
 
 export const MAX_STOP_BLOCKS = 2;
@@ -12,7 +13,15 @@ const ROLE = {
   reviewer: { phase: 'review', kind: 'review', command: 'cw review save', what: 'review (status approved or changes_requested)' },
 };
 
-// The last ```json fence of the agent's final message, or the whole message as JSON; null otherwise.
+// The status the agent's final message names: its final line (ADR 0014), else the last ```json fence
+// or the whole message as JSON, which agents of an earlier playbook end with; null otherwise.
+function finalStatus(message) {
+  const line = finalLineStatus(message);
+  if (line) return line;
+  const said = finalJson(message);
+  return typeof said?.status === 'string' ? said.status : null;
+}
+
 function finalJson(message) {
   const text = String(message ?? '').trim();
   const fences = [...text.matchAll(/```(?:json)?[ \t]*\n([\s\S]*?)\n[ \t]*```/g)];
@@ -52,15 +61,15 @@ export function inspectStop({ ws, role, agentId, lastMessage, validate }) {
   if (!(Date.parse(file.data.savedAt) > since)) {
     return { task, file, problem: `${name} was saved at ${file.data.savedAt}, before your current turn began (${new Date(since).toISOString()}); it is the earlier ${spec.kind}` };
   }
-  const said = finalJson(lastMessage);
-  if (said && typeof said.status === 'string' && said.status !== file.data.status) {
-    return { task, file, problem: `your final message says status ${said.status}, but ${name} says ${file.data.status}` };
+  const said = finalStatus(lastMessage);
+  if (said && said !== file.data.status) {
+    return { task, file, problem: `your final message says status ${said}, but ${name} says ${file.data.status}` };
   }
   return { task, file, problem: null };
 }
 
-// The block reason: the problem, the exact command, and the fence to end with.
+// The block reason: the problem, the exact command, and the line to end with.
 export function blockReason({ role, task, problem, count }) {
   const spec = ROLE[role];
-  return `dev-workflow stop check (${count}/${MAX_STOP_BLOCKS}): ${problem}. Save this round's ${spec.what}: pipe its JSON to \`${spec.command} --task ${task.id}\`, fix every point it reports, and end your turn with exactly the JSON fence it prints.`;
+  return `dev-workflow stop check (${count}/${MAX_STOP_BLOCKS}): ${problem}. Save this round's ${spec.what}: pipe its JSON to \`${spec.command} --task ${task.id}\`, fix every point it reports, and end your turn with exactly the line it prints last.`;
 }

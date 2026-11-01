@@ -2,10 +2,12 @@
 // of later commits; the body has the preset's sections, built only from what the task recorded:
 // ticket.json, spec.md, the last report, the reviews, and the checks and proofs cw ran.
 import { existsSync } from 'node:fs';
+import { posix } from 'node:path';
 import { parseSummary, taskCommits, titleOf } from './commit.mjs';
+import { decisionFor } from './decisions.mjs';
 import { readJson, readText, writeAtomic } from './fsx.mjs';
 import { failedError, preconditionError } from './out.mjs';
-import { parseSpec } from './spec.mjs';
+import { RISKS_SECTION, parseSpec } from './spec.mjs';
 import { readRoundFile } from './task.mjs';
 import { render } from './template.mjs';
 import { isNoTicket } from './ticket.mjs';
@@ -28,13 +30,20 @@ const points = (list) => (list ?? []).map((item) => (typeof item === 'string' ? 
 const bullets = (items) => items.map((item) => `- ${item}`).join('\n');
 const where = (finding) => (finding.file ? ` (\`${finding.file}${finding.line ? `:${finding.line}` : ''}\`)` : '');
 
-function whatAndWhy({ task, ticket, spec }) {
+const MAX_REQUIREMENTS = 6;
+
+// The orchestrator's summary of the change (cw pr body --what, O9), else the spec's requirements, at
+// most six: a long list made the orchestrator rewrite the whole body (ADR 0014).
+function whatAndWhy({ task, ticket, spec, what }) {
   const parsed = parseSpec(spec);
   const context = parsed.body('Context').split(/\n\s*\n/)[0].trim();
   const requirements = parsed.requirements.map((item) => item.text);
+  const listed = requirements.length > MAX_REQUIREMENTS
+    ? [...requirements.slice(0, MAX_REQUIREMENTS), `… and ${requirements.length - MAX_REQUIREMENTS} more requirements`]
+    : requirements;
   let lead = task.title;
   if (ticket?.summary) lead = ticket.url ? `[${ticket.key}](${ticket.url}): ${ticket.summary}` : `${ticket.key}: ${ticket.summary}`;
-  return [lead, context, bullets(requirements)].filter(Boolean).join('\n\n');
+  return [lead, context, what?.trim() || bullets(listed)].filter(Boolean).join('\n\n');
 }
 
 // The task's packages with their paths, from the classification.
@@ -45,22 +54,34 @@ function affectedPackages({ task, config }) {
   }));
 }
 
-// Only what cw verified: the passing checks of the final run and the proofs that hold.
+// Only what cw verified: the passing checks of the final run, one line per package, and the proofs
+// that hold: one with its failure line, several as their test files.
 function testing({ report, checks }) {
   const lines = [];
   for (const pkg of checks?.packages ?? []) {
-    for (const check of pkg.checks ?? []) {
-      if (check.result === 'pass') lines.push(`\`${check.command}\` in \`${pkg.path}\` (${pkg.id}): pass`);
-    }
+    const passed = (pkg.checks ?? []).filter((check) => check.result === 'pass').map((check) => `\`${check.command}\``);
+    if (passed.length) lines.push(`${passed.join(', ')} in \`${pkg.path}\` (${pkg.id}): pass`);
   }
-  for (const proof of report?.proofs ?? []) {
-    if (proof.holds) lines.push(`Proof: \`${proof.command}\` fails without the change${proof.failureLine ? ` (${proof.failureLine})` : ''} and passes with it`);
+  const holding = (report?.proofs ?? []).filter((proof) => proof.holds);
+  if (holding.length === 1) {
+    const [proof] = holding;
+    lines.push(`Proof: \`${proof.command}\` fails without the change${proof.failureLine ? ` (${proof.failureLine})` : ''} and passes with it`);
+  } else if (holding.length) {
+    const files = [...new Set(holding.map((proof) => posix.basename(proof.testPath ?? proof.test ?? proof.command)))];
+    lines.push(`Proofs: ${holding.length} tests fail without the change and pass with it (${files.map((file) => `\`${file}\``).join(', ')})`);
   }
   return bullets(lines);
 }
 
-function risks({ report, commits, preset }) {
-  const lines = points(report?.risks).map((risk) => risk.text);
+// The spec's Risks and deploy steps (ADR 0016), without the None of a change without fallout.
+function specRisks(spec) {
+  return parseSpec(spec).body(RISKS_SECTION).split('\n')
+    .map((line) => line.replace(/^\s*[-*+]\s*/, '').trim())
+    .filter((line) => line && !/^none\.?$/i.test(line));
+}
+
+function risks({ spec, report, commits, preset }) {
+  const lines = [...specRisks(spec), ...points(report?.risks).map((risk) => risk.text)];
   for (const commit of commits) {
     const { flags } = parseSummary(commit.subject, preset);
     if (flags.includes('!!!')) lines.push(`Breaking change: ${commit.subject}`);
@@ -69,33 +90,36 @@ function risks({ report, commits, preset }) {
   return bullets(lines);
 }
 
-// The report's open points, then the non-blocking findings nobody fixed: all of the final review's,
-// and the earlier rounds' that were not sent along to the implementer.
-function openPoints({ report, reviews }) {
+// How an open point shows the user's decision on its finding (ADR 0015).
+const decidedAs = (decision) => (decision?.as === 'accept'
+  ? `Accepted by the user (${decision.note}): `
+  : decision?.as === 'ticket' ? `Needs a ticket (${decision.note}): ` : '');
+const findingPoint = (finding, decision) => `${decidedAs(decision)}${finding.rule ? `${finding.rule}: ` : ''}${finding.issue}${where(finding)}`;
+
+// The report's open points, then the final review's non-blocking findings with the user's decisions.
+// The reviewer carries over the earlier findings that still hold (carriedFrom), and they inherit the
+// decision; one the user decided to fix is not open.
+function openPoints({ task, report, reviews, decisions }) {
   const lines = points(report?.openPoints).map((point) => (point.tag === 'manual' ? `Manual check (not verified here): ${point.text}` : point.text));
-  const seen = new Set();
-  const finalRound = Math.max(0, ...reviews.map((review) => review.round));
-  for (const review of [...reviews].sort((a, b) => b.round - a.round)) {
-    for (const finding of review.findings ?? []) {
-      if (finding.severity !== 'non_blocking' || (review.round !== finalRound && finding.sendAlong)) continue;
-      const key = `${finding.file ?? ''}|${finding.issue}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      lines.push(`${finding.rule ? `${finding.rule}: ` : ''}${finding.issue}${where(finding)}`);
-    }
+  const final = [...reviews].sort((a, b) => b.round - a.round)[0];
+  const known = { ...task, decisions };
+  for (const finding of final?.findings ?? []) {
+    const decision = decisionFor(known, final, finding.id);
+    if (decision?.as === 'fix') continue;
+    if (finding.severity === 'non_blocking' || decision) lines.push(findingPoint(finding, decision));
   }
-  return bullets(lines);
+  return bullets([...new Set(lines)]);
 }
 
 // The description; empty sections are left out (§10). It never asks for a merge.
-export function prBody({ task, config, ticket = null, spec = '', report = null, reviews = [], checks = null, commits = [] }) {
+export function prBody({ task, config, ticket = null, spec = '', report = null, reviews = [], checks = null, commits = [], decisions = [], what = null }) {
   const preset = config.git.conventions;
   const builders = {
-    'What & why': () => whatAndWhy({ task, ticket, spec }),
+    'What & why': () => whatAndWhy({ task, ticket, spec, what }),
     'Affected packages': () => affectedPackages({ task, config }),
     Testing: () => testing({ report, checks }),
-    'Risks & deploy steps': () => risks({ report, commits, preset }),
-    'Open points': () => openPoints({ report, reviews }),
+    'Risks & deploy steps': () => risks({ spec, report, commits, preset }),
+    'Open points': () => openPoints({ task, report, reviews, decisions }),
   };
   const parts = [];
   for (const name of preset.pr.sections) {
@@ -112,7 +136,7 @@ export function deliveryInputs(ws, task, cwd) {
   const reviews = [];
   for (let round = 1; round <= task.round; round += 1) {
     const review = readRoundFile(ws, task, 'review', round).data;
-    if (review) reviews.push({ ...review, round });
+    if (review) reviews.push({ ...review, round, reviewRound: review.reviewRound ?? null });
   }
   const report = readRoundFile(ws, task, 'report').data;
   const finalReview = reviews.find((review) => review.round === task.round);
@@ -125,6 +149,7 @@ export function deliveryInputs(ws, task, cwd) {
     reviews,
     checks: checksFile && existsSync(checksFile) ? readJson(checksFile) : null,
     commits: taskCommits(cwd, task),
+    decisions: task.decisions ?? [],
   };
 }
 

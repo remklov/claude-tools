@@ -10,7 +10,8 @@ Ask only what the ticket, the notes, the plan file and the code cannot answer:
 - edge cases and error behaviour the change must handle;
 - the acceptance criteria, if the ticket has none: S10 requests no acceptance-criteria field, so take them from the description or the plan file and confirm them here;
 - scope: what is explicitly not part of the task (the non-goals);
-- conflicts between the ticket, the plan file and the code;
+- conflicts between the ticket, its comments, the plan file and the code, and requirements or criteria that contradict each other when read literally (two criteria that both decide the same input differently, or leave it open);
+- the operational fallout: configuration and environment variables per environment (production included), migrations, caches and reindexing, deploy order, feature flags and manual steps. What the ticket leaves open here, ask; the answers go into the spec's Risks and deploy steps;
 - anything that would need a new dependency, a schema or API contract change, or a change outside the packages: the user decides it before the spec says so. A library named in the ticket or the notes is not yet an approved dependency: ask explicitly whether to add it to which package, and say that the user then installs it in the work tree when the implementer reports `blocked` (agents may not install, O7). Without that approval the spec does without it.
 
 Do not ask what you can read in the code, and do not ask for confirmation of things the ticket states clearly.

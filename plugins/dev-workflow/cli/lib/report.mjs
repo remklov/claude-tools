@@ -25,6 +25,20 @@ const FENCE = /```(?:json)?[ \t]*\n([\s\S]*?)\n[ \t]*```/g;
 
 export const fence = (value) => `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``;
 
+// The one line an agent ends its turn with after cw report save or cw review save (ADR 0014). The
+// orchestrator reads the saved file with cw, so the agent's final message only names the status,
+// which the SubagentStop gate compares with the file.
+export const finalLine = (saved) =>
+  `dev-workflow ${saved.kind === 'review' ? 'review' : 'report'} ${saved.task} round ${saved.round}${saved.kind === 'review' ? `.${saved.reviewRound}` : ''}: ${saved.status}`;
+
+const FINAL_LINE = /^dev-workflow (?:report|review) \S+ round \d+(?:\.\d+)?: ([a-z_]+)$/;
+
+// The status of the final line in an agent's message (its last non-empty line), or null.
+export function finalLineStatus(message) {
+  const last = String(message ?? '').trim().split('\n').at(-1)?.trim() ?? '';
+  return FINAL_LINE.exec(last)?.[1] ?? null;
+}
+
 // The agent's JSON: the whole text, or the last ```json fence in it.
 export function parseAgentJson(text) {
   const raw = String(text).trim();
@@ -104,6 +118,7 @@ export function validateReviewInput(input) {
   }
   for (const finding of input.findings) {
     if (finding.sendAlong && finding.severity === 'blocking') errors.push(`${finding.id}: sendAlong marks non-blocking findings only`);
+    if (finding.decision && !finding.suggestion?.trim()) errors.push(`${finding.id}: a finding for the user's decision names your recommendation in suggestion`);
     if (!RULE_CATEGORIES.has(finding.rule) && !input.rulesChecked.includes(finding.rule)) {
       errors.push(`${finding.id} cites ${finding.rule}, which is not in rulesChecked`);
     }

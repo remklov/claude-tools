@@ -15,11 +15,12 @@ Start from the template of `cw spec show --task <id>`:
 ### Requirements
 ### Acceptance criteria
 ### Non-goals
+### Risks and deploy steps
 ### Definition of done
 ```
 
 - Keep the title line and the header line as `cw task new` wrote them; lint compares ticket, type and branch with the task.
-- All five sections, in this order, with exactly these headings.
+- All six sections, in this order, with exactly these headings; lint requires the five without Risks and deploy steps.
 
 ## Context
 
@@ -43,6 +44,10 @@ Start from the template of `cw spec show --task <id>`:
 ## Non-goals
 
 What stays out, one line each: neighbouring features, refactors, dependency updates. `cw review scope` shows the reviewer the changed files that look like a non-goal.
+
+## Risks and deploy steps
+
+The operational fallout, one line each (ADR 0016): configuration and environment variables per environment (production included), migrations, caches and reindexing, deploy order, feature flags, manual steps, and risks the user named. `None.` when the change has none. The PR/MR's Risks & deploy steps take these lines over. Lint warns when the section is missing (a spec saved before it existed passes) and refuses the template's placeholder.
 
 ## Definition of done
 

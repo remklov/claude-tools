@@ -17,5 +17,9 @@ The architecture decisions D1 to D12 of the first build are in `docs/PLAN.md` §
 | [0011](0011-reviewer-history-through-cw.md) | The reviewer reads history with `cw review diff\|log\|status`; no `git -C .claude/worktrees/*` allow rules |
 | [0012](0012-fresh-implementer-above-context.md) | `cw task return` starts a fresh implementer above 150k tokens of context; every report carries a handover |
 | [0013](0013-implementer-rules-check.md) | The implementer checks its change against the applicable rules; a done report lists them as `rulesChecked` |
+| [0014](0014-fewer-orchestrator-calls.md) | Fewer and smaller orchestrator calls: the hook records agents, `cw task review` reads the report, agents end with one line, `cw pr body --what`, a new session per ticket |
+| [0015](0015-user-decides-review-findings.md) | The user decides on defects the review does not block (`decision`, `cw review decide`, `carriedFrom`) |
+| [0016](0016-intake-checks.md) | The intake checks of a kickoff plan: comments, links and earlier work on the key, Risks and deploy steps, the ticket in the review |
+| [0017](0017-rule-hints.md) | `cw checks` prints rule hints from the diff |
 
 A new record takes the next number, the format of the existing ones and a line in this table.

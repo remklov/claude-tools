@@ -17,7 +17,7 @@ Run `cw doctor --quick`.
 
 ## 3. Active tasks
 
-Run `cw task list` to see every active task, then:
+Run `cw task list` to see every active task. When it notes that this session ran a task before, tell the user in one sentence that the new ticket is cheaper in a new session (`/clear`, then the ticket command again) and ask whether to go on here; that session's context goes into every call of the new task. Then:
 
 - **A ticket key:** `cw task list --ticket <KEY>`. If it lists a task, show its id, phase and owner session and ask the user whether to continue it in this session.
   - Yes: `cw task new --rebind <id>`. Its output names the task's phase, the next command and the agents of the earlier session. Continue at the step of that phase (the table "Where you are" in the skill) with that command, and skip the rest of O1–O3. Agents of the earlier session get a fresh Agent call, never a SendMessage (`cw` prints the right command).
@@ -27,9 +27,9 @@ Run `cw task list` to see every active task, then:
 
 ## 4. The ticket
 
-Run `cw ticket context --ticket <KEY>`. It names the ticket source (`tickets.source`) and the file of the key:
+Run `cw ticket context --ticket <KEY>`. It names the ticket source (`tickets.source`) and the file of the key, and the existing work on the key: branches whose name holds it and commits whose message names it. Someone may have built it already, and the ticket's status does not tell: ask the user about such work before you plan anew (ADR 0016).
 
-- **jira** or **linear:** read the issue with exactly the one call that `cw playbook read reference/jira.md` (Jira) or `cw playbook read reference/linear.md` (Linear) describes. No other calls, no writes.
+- **jira** or **linear:** read the issue as `cw playbook read reference/jira.md` (Jira) or `cw playbook read reference/linear.md` (Linear) describes, with its comments and linked issues: scope agreed in a comment belongs to the requirement. No other calls, no writes.
 - **local:** the file it names is the ticket; read it as `cw playbook read reference/local.md` describes. Exit 3 means there is no such file: tell the user and ask for the right key.
 - **A context file** (jira or linear) that exists: read it with the Read tool. It holds technical requirements and implementation details for the ticket: they feed O2 and the spec, and its path goes into the snapshot as `context`.
 - The ticket cannot be read (the tool is missing, not logged in, or the call fails): tell the user (the one-time `/mcp` login fixes a missing login) and ask them to paste the ticket text, or to confirm that the notes are the whole requirement.

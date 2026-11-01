@@ -1,7 +1,7 @@
 // Reviewer commands (§6 R1 and R8, §8): review scope and review save. Both read the work tree from
 // task.json, whatever the cwd (D5), and never write to it; the reviewer re-runs checks and proofs with
 // cw checks --changed and cw prove --recheck.
-import { fence } from '../lib/report.mjs';
+import { finalLine } from '../lib/report.mjs';
 import { reviewRead, reviewScope, saveReview } from '../lib/review.mjs';
 import { usageError } from '../lib/out.mjs';
 import { emit, loadTaskContext, readStdinJson } from './common.mjs';
@@ -81,14 +81,16 @@ export const commands = [
     path: ['review', 'save'],
     group: 'reviewer',
     usage: 'cw review save --task <id> < <JSON file>',
-    summary: 'Validate and save your review (JSON on stdin); end your turn with the printed JSON fence',
+    summary: 'Validate and save your review (JSON on stdin); end your turn with the line it prints last',
     flags: { task: 'string' },
     run(ctx) {
       const { ws, task } = loadTaskContext(ctx);
       const input = readStdinJson(ctx, `cw review save --task ${task.id} < <scratchpad>/${task.id}-review-1.json`);
-      const { review } = saveReview({ ws, task, input });
-      if (ctx.flags.json) ctx.out.data(review);
-      else ctx.out.print(fence(review));
+      const { path, review } = saveReview({ ws, task, input });
+      if (ctx.flags.json) return ctx.out.data(review);
+      const blocking = review.findings.filter((finding) => finding.severity === 'blocking').length;
+      ctx.out.print(`Saved ${path}: ${review.status} · ${review.findings.length} finding(s), ${blocking} blocking`);
+      ctx.out.print(`End your turn with exactly this line:\n${finalLine(review)}`);
     },
   },
 ];

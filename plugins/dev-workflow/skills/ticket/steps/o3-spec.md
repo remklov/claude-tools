@@ -48,6 +48,6 @@ cw spec save --task <id> < <scratchpad>/<id>-spec-1.md
 
 Run `cw spec lint --task <id>`. Errors block classification and the implementer's start: fix each one, save the whole spec again, and lint again. Treat warnings as questions: a vague criterion gets sharper wording; a path that does not exist yet is fine for a new file.
 
-Before you go on, read the spec once as the implementer will: every requirement has at least one acceptance criterion, every criterion is testable, and nothing in it contradicts the ticket or the user's answers.
+Before you go on, read the spec once as the implementer will: every requirement has at least one acceptance criterion, every criterion is testable, nothing in it contradicts the ticket, its comments or the user's answers, no two criteria decide the same input differently, every requirement of the ticket and its comments is a requirement or a non-goal, and Risks and deploy steps names the fallout (or None). The implementer and the reviewer know only what the spec says.
 
 Done when: `cw spec lint` reports a clean spec. Continue with O4.

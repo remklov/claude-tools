@@ -39,16 +39,16 @@ The main session becomes the orchestrator of one task until `cw task end`. Its g
 
 | Step | What | `cw` commands |
 |---|---|---|
-| O1 Intake | Setup check, active task of the ticket (rebind after the user agreed, D3; the output names the phase and the next command, and the step follows from the phase), one ticket read from the source of `tickets.source` and its context file (D6, ADR 0009), the kickoff plan, Explore (waiting for its result) | `doctor --quick`, `task list --ticket`, `task new --rebind` |
-| O2 Clarify | Questions until every acceptance criterion is testable; a check only a person can do becomes a manual check in the Definition of done | – |
-| O3 Spec | Task, ticket snapshot, spec, lint | `task new`, `ticket save`, `spec save`, `spec lint` |
+| O1 Intake | Setup check, active task of the ticket (rebind after the user agreed, D3; the output names the phase and the next command, and the step follows from the phase), a new session suggested when this one ran a task ([ADR 0014](adr/0014-fewer-orchestrator-calls.md)), the existing work on the key and one ticket read from the source of `tickets.source` with its comments and links, and its context file (D6, ADR 0009, [ADR 0016](adr/0016-intake-checks.md)), the kickoff plan, Explore (waiting for its result) | `doctor --quick`, `task list --ticket`, `task new --rebind`, `ticket context` |
+| O2 Clarify | Questions until every acceptance criterion is testable, criteria that contradict each other, and the operational fallout (configuration per environment, migrations, caches, deploy order); a check only a person can do becomes a manual check in the Definition of done | – |
+| O3 Spec | Task, ticket snapshot, spec with Risks and deploy steps, lint | `task new`, `ticket save`, `spec save`, `spec lint` |
 | O4 Classify | Packages, areas, minimum; the chosen level with a reason | `classify`, `classify --set --why [--override]` |
 | O5 Confirm | For the levels in `workflow.confirm` | `task confirm --note` |
-| O6 Delegate | The implementer Agent call, its id recorded | `task start`, `task agent --role implementer` |
-| O7 Report | done → O8; blocked → answer; misclassified → reclassify and reset | `report show`, `classify`, `task reset [--keep --note]`, `task start --new-agent` |
-| O8 Review loop | Foreign commits, review rounds, findings back, escalation | `git foreign-commits`, `task review`, `review show`, `task return [--spec-changed \| --continue] [--new-agent]` |
-| O9 Deliver | Body, commands, confirmation, push and PR/MR, record | `pr body [--stdin]`, `pr command`, `pr title`, `pr record --url \| --skipped` |
-| O10 Close | Work tree back, task ended, short report | `task cleanup`, `task end --outcome` |
+| O6 Delegate | The implementer Agent call; SubagentStart records its id (`task agent` only when a command says it recorded none) | `task start` |
+| O7 Report | One call: a done report is shown, foreign commits are checked, the review starts → O8; blocked → answer; misclassified → reclassify and reset | `task review`, `report show`, `classify`, `task reset [--keep --note]`, `task start --new-agent` |
+| O8 Review loop | Review rounds; the user decides on the marked findings ([ADR 0015](adr/0015-user-decides-review-findings.md)); findings back, escalation | `review show`, `review decide --finding --as --note`, `task return [--spec-changed \| --continue] [--new-agent]` |
+| O9 Deliver | Body around the orchestrator's summary, commands, confirmation, push and PR/MR, record | `pr body --what <file> [--stdin]`, `pr command`, `pr title`, `pr record --url \| --skipped` |
+| O10 Close | Work tree back, task ended (the ticket decisions listed, a new session suggested), short report | `task cleanup`, `task end --outcome` |
 
 **Acceptance criteria are always testable** (O2). A check only a person can do, such as a visual detail in a browser, is never an acceptance criterion: the spec lists it under Definition of done as `Manual check: …`, the implementer writes no test for it and lists it as an open point with tag `manual`, the reviewer raises no finding for it, and the PR/MR body names it as not verified. The ticket skill (O2, `reference/spec.md`), the implementer playbook (step 3) and the reviewer playbook (R3) say the same.
 
@@ -62,10 +62,10 @@ The misclassified reset (`cw task reset`) removes an implementer's empty start (
 | 2 | Read the brief, then the context (work tree, git form, packages, rules) and the code | `context`, `rules show` |
 | 3 | Tests first: at least one per acceptance criterion, a regression test for a bug fix; manual checks need none | `step --done 3` |
 | 4 | Implement within scope; no dependency changes; then check the change against every applicable rule, as the reviewer does in R4, and fix each violation | `rules applicable`, `step --done 4` |
-| 5 | Checks of every changed package until they pass; never loosen a check | `checks --changed` |
+| 5 | Checks of every changed package until they pass; never loosen a check; check each rule hint ([ADR 0017](adr/0017-rule-hints.md)) against its rule | `checks --changed` |
 | 6 | Stage, message file (body on stdin, attribution lines as trailers), `git commit -F` in the printed git form, convention check | `commit msg [--body-file -] [--trailer]`, `commit lint` |
 | 7 | Prove each new test fails without the change and passes with it | `prove --test --change` |
-| 8 | Report written into the scratchpad, on stdin to `cw`; the final message is exactly the printed JSON fence | `report save` |
+| 8 | Report written into the scratchpad, on stdin to `cw`; the final message is exactly the line it prints last | `report save` |
 
 - **Report** (`schemas/dev-report.schema.json`): `status` (done, blocked, misclassified), `acceptanceCriteria` (id, met, evidence), `rulesChecked` (the IDs of `cw rules applicable` the change was checked against in step 4, [ADR 0013](adr/0013-implementer-rules-check.md)), `risks`, `openPoints` (text, optional tag manual, follow-up, risk, question), `blocked` (question, needed), `misclassified` (reason, suggested level), and the required `handover` (decisions, rejected, testing, pitfalls, deviations: short notes for a fresh implementer, [ADR 0012](adr/0012-fresh-implementer-above-context.md)); a done report fills at least one of them. `cw` adds the commits, the checks result and the proofs, and refuses a done report whose state does not hold or whose `rulesChecked` differs from `cw rules applicable`.
 - **Blocked** for an ambiguous criterion, a needed dependency, a refused setup, unowned files or a conflict with a protected rule. **Misclassified** when the task needs more than the complexity's guardrails allow; the implementer stops before it expands the scope.
@@ -83,14 +83,14 @@ The misclassified reset (`cw task reset`) removes an implementer's empty start (
 |---|---|---|
 | R1 | Scope: diff stat, unowned files, foreign commits, uncommitted changes and added `node_modules` paths (blocking), non-goal hints, pack scope scripts (blocking unless a non-blocking `scope` finding names the script and says why it is accepted) | `review scope` |
 | R2 | The checks in the task's work tree; a failing check is blocking | `checks --changed` |
-| R3 | Every acceptance criterion with named evidence; the recorded proofs re-run; a criterion without a test, or a test that does not fail without the change, is a blocking CORE-TEST-SPEC finding; a manual check of the Definition of done needs no test and is no finding | `prove --recheck` |
+| R3 | The ticket against the spec and the diff in both directions (a gap or a contradiction is a `spec` finding for the user's decision); every acceptance criterion with named evidence; the recorded proofs re-run; a criterion without a test, or a test that does not fail without the change, is a blocking CORE-TEST-SPEC finding; a manual check of the Definition of done needs no test and is no finding | `prove --recheck` |
 | R4 | Each applicable rule checked; `rulesChecked` equals that set | `rules applicable` |
 | R5 | The reviewer procedures from the brief | `run <pack>:<script>` where a procedure names one |
-| R6 | Correctness and security beyond the rules | – |
+| R6 | Correctness and security beyond the rules: a defect on a path the change touches is blocking, also when narrow or unreachable today; one outside the change is for the user's decision | – |
 | R7 | Branch name and commits against the git preset | `commit lint` |
-| R8 | The review written into the scratchpad, on stdin to `cw`; the final message is exactly the printed JSON fence | `review save` |
+| R8 | The review written into the scratchpad, on stdin to `cw`; the final message is exactly the line it prints last | `review save` |
 
-- **Review** (`schemas/review.schema.json`): `status` (approved, changes_requested), `acceptanceCriteria`, `rulesChecked`, `findings` (id, severity blocking or non_blocking, rule: a checked rule ID or spec, scope, git, correctness, security; file, line, issue, suggestion, `sendAlong`), `summary`.
+- **Review** (`schemas/review.schema.json`): `status` (approved, changes_requested), `acceptanceCriteria`, `rulesChecked`, `findings` (id, severity blocking or non_blocking, rule: a checked rule ID or spec, scope, git, correctness, security; file, line, issue, suggestion, `sendAlong`, `decision` for the user's decision with the recommendation in `suggestion`, `carriedFrom` for a finding carried over from the previous review, which keeps the user's decision), `summary`.
 - `cw review save` refuses an approval without current passing checks for every changed package, without a proof recheck at the reviewed head after the report, with missing or extra rules, with scope problems, or for a bug fix without a holding regression proof.
 - A style preference without a rule is never blocking. Cheap non-blocking findings carry `sendAlong`, so the implementer fixes them together with the blocking ones.
 - The stop check holds the reviewer the same way until `cw review save` succeeded for the round; in a later round, continued with SendMessage, it saves a new review.

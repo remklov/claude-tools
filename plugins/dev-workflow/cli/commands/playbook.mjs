@@ -22,9 +22,9 @@ export const ROLES = {
     skill: 'ticket',
     contract: null,
     commands: [
-      'doctor', 'task list', 'task new', 'ticket context', 'ticket save', 'spec save', 'spec lint', 'classify', 'task confirm', 'task start', 'task agent', 'report show',
-      'task reset', 'git foreign-commits', 'task review', 'review show', 'task return', 'pr body', 'pr command', 'pr record', 'task cleanup', 'task end',
-      'spec show', 'pr title', 'task show', 'playbook read',
+      'doctor', 'task list', 'task new', 'ticket context', 'ticket save', 'spec save', 'spec lint', 'classify', 'task confirm', 'task start', 'task agent', 'task review',
+      'report show', 'task reset', 'review show', 'review decide', 'task return', 'pr body', 'pr command', 'pr record', 'task cleanup', 'task end',
+      'spec show', 'git foreign-commits', 'pr title', 'task show', 'playbook read',
     ],
   },
   implementer: {

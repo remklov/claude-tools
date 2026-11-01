@@ -33,7 +33,9 @@
           "line": { "type": "integer", "minimum": 1 },
           "issue": { "type": "string", "minLength": 1 },
           "suggestion": { "type": "string" },
-          "sendAlong": { "type": "boolean" }
+          "sendAlong": { "type": "boolean" },
+          "decision": { "type": "boolean" },
+          "carriedFrom": { "type": "string", "pattern": "^F[1-9][0-9]*$" }
         }
       }
     },

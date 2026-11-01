@@ -2,6 +2,7 @@
 // commands, the recorded URL, and the cleanup of the work tree. cw never pushes and never creates a
 // PR/MR: it prints the exact commands, and the orchestrator runs them after the user confirmed.
 import { existsSync, realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   branchExists, commitsBetween, currentBranch, git, gitResult, headCommit, porcelain,
 } from '../lib/git.mjs';
@@ -9,6 +10,8 @@ import { sameCommit } from '../lib/cycle.mjs';
 import { adapterFor, detectHost, pushCommand, quote, requireHost } from '../lib/host/index.mjs';
 import { EXIT, failedError, preconditionError, usageError } from '../lib/out.mjs';
 import { foreignCommits, taskCommits } from '../lib/commit.mjs';
+import { askUser, fixDecided, undecided } from '../lib/decisions.mjs';
+import { readText } from '../lib/fsx.mjs';
 import { deliveryInputs, prBody, prBodyPath, prTitle, writePrBody } from '../lib/pr.mjs';
 import { isActive, listTasks, readRoundFile, setResumeBranch, staleAgent, transition, updateTask } from '../lib/task.mjs';
 import { render } from '../lib/template.mjs';
@@ -63,6 +66,11 @@ function enterDeliver(ws, loaded, by) {
       `Have the new commits reviewed: cw task review --task ${task.id} (a new review round over the commits since ${short(review.head)}).`,
     );
   }
+  // No finding the user decides on goes into the PR/MR unseen (ADR 0015).
+  const open = undecided(task, review);
+  if (open.length) throw preconditionError(`The approved review leaves ${open.map((finding) => finding.id).join(', ')} to the user's decision.`, `First ${askUser(task, open)}.`);
+  const fixes = fixDecided(task, review);
+  if (fixes.length) throw preconditionError(`The user decided to fix ${fixes.map((finding) => finding.id).join(', ')} in this task.`, `Send them back first: cw task return --task ${task.id}.`);
   if (task.phase === 'review') {
     task = updateTask(ws, task.id, (fresh) => {
       if (fresh.phase === 'review') transition(fresh, 'deliver', { note: `review round ${fresh.reviewRound} approved at ${short(tip)}`, by });
@@ -73,6 +81,58 @@ function enterDeliver(ws, loaded, by) {
 
 // --- git foreign-commits ------------------------------------------------------------------------
 
+// Whether the task branch holds only this task's commits and the work tree is on it, with the git
+// command that fixes it for the implementer. cw task review runs it too, so the orchestrator needs no
+// separate call before a review round (ADR 0014).
+export function foreignCheck(ws, task) {
+  requireBase(task);
+  const workTree = workTreeOf(ws, task);
+  if (!workTree || !existsSync(workTree)) throw preconditionError(`Task ${task.id} has no work tree yet.`, `The implementer creates it with cw ws setup --task ${task.id}.`);
+  branchTip(workTree, task);
+  const { count, foreign } = foreignCommits(workTree, task);
+  const onTaskBranch = currentBranch(workTree) === task.branch;
+  // A rebase drops foreign commits only when they come before all of the task's own commits.
+  const prefix = foreign.length > 0 && foreign.every((commit, i) => commit.index === i);
+  // The implementer runs plain git inside its worktree (D5); in-place git -C <appRoot> from the project root.
+  const gitPrefix = gitForm(ws);
+  // The command for the implementer: the rebase, else the switch back to the task branch.
+  const command = prefix
+    ? `${gitPrefix} rebase --onto ${task.base.commit} ${foreign.at(-1).fullSha} ${quote(task.branch)}`
+    : onTaskBranch ? null : `${gitPrefix} switch ${quote(task.branch)}`;
+  // An implementer of an earlier session gets no SendMessage: the review turns the problem into a
+  // blocking finding, and task return hands the command to a fresh implementer.
+  const stale = staleAgent(task, 'implementer');
+  const handOn = (what) => (stale
+    ? `the implementer belongs to an earlier session (no SendMessage): continue with cw task review --task ${task.id}; cw review scope makes this a blocking finding, and cw task return --task ${task.id} --new-agent gives a fresh implementer ${what}: ${command}`
+    : `send the same implementer ${what}: ${command}`);
+  const fixes = [];
+  if (prefix) fixes.push(handOn('the rebase that keeps only its own commits'));
+  else if (!onTaskBranch) fixes.push(handOn('the switch back to the task branch'));
+  if (foreign.length && !prefix) fixes.push("the foreign commits are interleaved with the task's own; ask the user.");
+  return {
+    task: task.id,
+    branch: task.branch,
+    workTree,
+    onTaskBranch,
+    base: task.base.commit,
+    commits: count,
+    foreign: foreign.map(({ sha, subject, alsoOn, reasons }) => ({ sha, subject, alsoOn, reasons })),
+    command,
+    fix: fixes.length ? fixes.join('; then ') : null,
+    clean: onTaskBranch && !foreign.length,
+    staleImplementer: stale,
+  };
+}
+
+export function printForeign(out, result) {
+  if (!result.onTaskBranch) out.print(`${result.workTree} is not on ${result.branch}.`);
+  for (const commit of result.foreign) {
+    out.print(`foreign: ${commit.sha} ${commit.subject} (${commit.reasons.join(', ')}${commit.alsoOn.length ? `; also on ${commit.alsoOn.join(', ')}` : ''})`);
+  }
+  if (result.fix) out.print(`Fix: ${result.fix}`);
+  if (result.clean) out.print(`${result.branch}: ${result.commits} commit(s), all from this task`);
+}
+
 const foreignCommitsCommand = {
   path: ['git', 'foreign-commits'],
   group: 'orchestrator',
@@ -81,50 +141,9 @@ const foreignCommitsCommand = {
   flags: { task: 'string' },
   run(ctx) {
     const { ws, task } = loadTaskContext(ctx);
-    requireBase(task);
-    const workTree = workTreeOf(ws, task);
-    if (!workTree || !existsSync(workTree)) throw preconditionError(`Task ${task.id} has no work tree yet.`, `The implementer creates it with cw ws setup --task ${task.id}.`);
-    branchTip(workTree, task);
-    const { count, foreign } = foreignCommits(workTree, task);
-    const onTaskBranch = currentBranch(workTree) === task.branch;
-    // A rebase drops foreign commits only when they come before all of the task's own commits.
-    const prefix = foreign.length > 0 && foreign.every((commit, i) => commit.index === i);
-    // The implementer runs plain git inside its worktree (D5); in-place git -C <appRoot> from the project root.
-    const gitPrefix = gitForm(ws);
-    // The command for the implementer: the rebase, else the switch back to the task branch.
-    const command = prefix
-      ? `${gitPrefix} rebase --onto ${task.base.commit} ${foreign.at(-1).fullSha} ${quote(task.branch)}`
-      : onTaskBranch ? null : `${gitPrefix} switch ${quote(task.branch)}`;
-    // An implementer of an earlier session gets no SendMessage: the review turns the problem into a
-    // blocking finding, and task return hands the command to a fresh implementer.
-    const handOn = (what) => (staleAgent(task, 'implementer')
-      ? `the implementer belongs to an earlier session (no SendMessage): continue with cw task review --task ${task.id}; cw review scope makes this a blocking finding, and cw task return --task ${task.id} --new-agent gives a fresh implementer ${what}: ${command}`
-      : `send the same implementer ${what}: ${command}`);
-    const fixes = [];
-    if (prefix) fixes.push(handOn('the rebase that keeps only its own commits'));
-    else if (!onTaskBranch) fixes.push(handOn('the switch back to the task branch'));
-    if (foreign.length && !prefix) fixes.push("the foreign commits are interleaved with the task's own; ask the user.");
-    const fix = fixes.length ? fixes.join('; then ') : null;
-    const result = {
-      task: task.id,
-      branch: task.branch,
-      workTree,
-      onTaskBranch,
-      base: task.base.commit,
-      commits: count,
-      foreign: foreign.map(({ sha, subject, alsoOn, reasons }) => ({ sha, subject, alsoOn, reasons })),
-      command,
-      fix,
-    };
-    emit(ctx, result, () => {
-      if (!onTaskBranch) ctx.out.print(`${workTree} is not on ${task.branch}.`);
-      for (const commit of result.foreign) {
-        ctx.out.print(`foreign: ${commit.sha} ${commit.subject} (${commit.reasons.join(', ')}${commit.alsoOn.length ? `; also on ${commit.alsoOn.join(', ')}` : ''})`);
-      }
-      if (fix) ctx.out.print(`Fix: ${fix}`);
-      if (onTaskBranch && !foreign.length) ctx.out.print(`${task.branch}: ${count} commit(s), all from this task`);
-    });
-    return foreign.length || !onTaskBranch ? EXIT.failed : EXIT.ok;
+    const { clean, staleImplementer, ...result } = foreignCheck(ws, task);
+    emit(ctx, result, () => printForeign(ctx.out, { ...result, clean }));
+    return clean ? EXIT.ok : EXIT.failed;
   },
 };
 
@@ -184,18 +203,30 @@ function correctedBody(ws, task, text) {
   return `${content ? `${content}\n\n` : ''}${trailers.join('\n')}\n`;
 }
 
+// The orchestrator's summary for What & why: a few lines of Markdown, no "## " section of its own.
+function readWhat(ctx) {
+  const file = resolve(ctx.cwd, ctx.flags.what);
+  const text = readText(file);
+  if (text === null) throw preconditionError(`--what ${ctx.flags.what}: no such file (${file})`, 'Write the summary to a file in your scratchpad directory with the Write tool, then pass its path.');
+  if (!text.trim()) throw failedError(`--what ${file} is empty`, 'Write three to six lines: what changed, in the reader\'s words.');
+  if (sectionHeadings(text).length) throw failedError(`--what ${file} has "## " headings`, 'Write the summary without headings; cw places it under What & why.');
+  return text.trim();
+}
+
 const prBodyCommand = {
   path: ['pr', 'body'],
   group: 'orchestrator',
-  usage: 'cw pr body --task <id> [--stdin] [--json]',
-  summary: 'Write the PR/MR description to the task dir (--stdin: replace it with corrected text)',
-  flags: { task: 'string', stdin: 'boolean' },
+  usage: 'cw pr body --task <id> [--what <file>] [--stdin] [--json]',
+  summary: "Write the PR/MR description to the task dir; --what: the orchestrator's summary of the change for What & why; --stdin: replace it with corrected text",
+  flags: { task: 'string', stdin: 'boolean', what: 'string' },
   run(ctx) {
     const { ws, task: loaded } = loadTaskContext(ctx);
+    if (ctx.flags.stdin && ctx.flags.what) throw usageError('--what and --stdin exclude each other', 'Pass --what <file> for the summary, or --stdin for a whole corrected body.');
+    const what = ctx.flags.what ? readWhat(ctx) : null;
     const { task, tree } = enterDeliver(ws, loaded, 'cw pr body');
     const body = ctx.flags.stdin
       ? correctedBody(ws, task, readStdinText(ctx, `cw pr body --task ${task.id} --stdin < <scratchpad>/${task.id}-pr-body-1.md`))
-      : prBody({ task, config: ws.config, ...deliveryInputs(ws, task, tree) });
+      : prBody({ task, config: ws.config, ...deliveryInputs(ws, task, tree), what });
     const file = writePrBody(ws, task, body);
     emit(ctx, { task: task.id, file, body }, (value) => ctx.out.print(`${value.file}\n\n${value.body.trimEnd()}`));
   },

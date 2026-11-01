@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { withDefaults } from '../../cli/lib/config.mjs';
 import {
-  devReportProblems, fence, parseAgentJson, validateDevReportInput, validateReviewInput, validateSavedDevReport,
+  devReportProblems, fence, finalLine, finalLineStatus, parseAgentJson, validateDevReportInput, validateReviewInput, validateSavedDevReport,
 } from '../../cli/lib/report.mjs';
 import { inPlaceConfig } from '../fixtures/repo.mjs';
 
@@ -152,4 +152,13 @@ test('devReportProblems: rulesChecked equals the rules that apply to the change,
   assert.deepEqual(errorsOf(['CORE-SCOPE'], ['CORE-SCOPE', 'CORE-NAMING', 'TS-NO-CAST']), ['rulesChecked misses CORE-NAMING, TS-NO-CAST: check every rule that cw rules applicable --task t lists']);
   assert.deepEqual(errorsOf(['CORE-SCOPE', 'REACT-A11Y'], ['CORE-SCOPE']), ['rulesChecked lists REACT-A11Y, which do not apply to this task (cw rules applicable --task t): remove them']);
   assert.deepEqual(errorsOf([], []), [], 'a project without any rule that applies');
+});
+
+test('finalLine: the one line an agent ends with, and its status (ADR 0014)', () => {
+  assert.equal(finalLine({ kind: 'dev-report', task: 'APP-1__feature__x', round: 2, status: 'done' }), 'dev-workflow report APP-1__feature__x round 2: done');
+  const review = finalLine({ kind: 'review', task: 'APP-1__feature__x', round: 2, reviewRound: 3, status: 'changes_requested' });
+  assert.equal(review, 'dev-workflow review APP-1__feature__x round 2.3: changes_requested');
+  assert.equal(finalLineStatus(`Saved.\n${review}\n`), 'changes_requested');
+  assert.equal(finalLineStatus(`${review}\nand more`), null, 'only the last line counts');
+  assert.equal(finalLineStatus(undefined), null);
 });

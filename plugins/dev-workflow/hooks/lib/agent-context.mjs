@@ -74,7 +74,7 @@ export function agentContext({ ws, task, role, guards, cwd }) {
   const tail = [
     'Guards (a hook denies these, naming the reason and the alternative):',
     ...guardLines({ ws, role, guards }),
-    `Finish: pipe your JSON to \`${finish}\` and end with exactly the JSON fence it prints. A stop check holds you until this round's file is saved and valid.`,
+    `Finish: pipe your JSON to \`${finish}\` and end with exactly the line it prints last. A stop check holds you until this round's file is saved and valid.`,
   ];
   const render = (short) => [...head, 'Packages and checks (cw checks --changed runs them in the work tree):', ...packageLines(ws, task, { short }), ...tail].join('\n');
   let text = render(false);

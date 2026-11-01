@@ -31,13 +31,36 @@ export function lintTaskSpec(ws, task, book = buildRulebook(ws)) {
 // The intake instructions per ticket source, for cw ticket context.
 const SOURCE_REFERENCE = { jira: 'reference/jira.md', linear: 'reference/linear.md', local: 'reference/local.md' };
 
-function printTicketContext(ctx, { ticket, source, file, exists }) {
+// Earlier work on the ticket (ADR 0016): branches whose name holds the key and commits whose message
+// names it, on every local and remote-tracking branch (cw does not fetch). Someone may have built it
+// already; the ticket's status does not tell. null without a work repo.
+function existingWork(ws, ticket) {
+  const repo = orchestratorTreeOf(ws, null);
+  if (!existsSync(repo)) return null;
+  const key = ticket.toLowerCase();
+  const branches = (tryGit(['for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes'], { cwd: repo }) ?? '')
+    .split('\n')
+    .filter((ref) => ref && ref.toLowerCase().includes(key));
+  const commits = (tryGit(['log', '--all', '-i', '--fixed-strings', `--grep=${ticket}`, '--format=%h %s', '-n', '10'], { cwd: repo }) ?? '')
+    .split('\n')
+    .filter(Boolean);
+  return { branches, commits };
+}
+
+function printTicketContext(ctx, { ticket, source, file, exists, work }) {
   if (source === 'notes') return ctx.out.print(`${ticket} · no ticket: the command's notes are the ticket.`);
   const reference = `cw playbook read ${SOURCE_REFERENCE[source]}`;
-  if (source === 'local') return ctx.out.print(`${ticket} · source local: the ticket is ${file} (${reference}).`);
-  ctx.out.print(`${ticket} · source ${source}: read the ticket as ${reference} describes.`);
-  if (!file) ctx.out.print('Context file: none (tickets.contextPath is not set).');
-  else ctx.out.print(exists ? `Context file: ${file}; read it as technical context.` : `Context file: ${file} does not exist.`);
+  if (source === 'local') ctx.out.print(`${ticket} · source local: the ticket is ${file} (${reference}).`);
+  else {
+    ctx.out.print(`${ticket} · source ${source}: read the ticket as ${reference} describes.`);
+    if (!file) ctx.out.print('Context file: none (tickets.contextPath is not set).');
+    else ctx.out.print(exists ? `Context file: ${file}; read it as technical context.` : `Context file: ${file} does not exist.`);
+  }
+  if (!work) return;
+  if (!work.branches.length && !work.commits.length) return ctx.out.print(`Existing work: no branch or commit names ${ticket}.`);
+  ctx.out.print(`Existing work on ${ticket} (ask the user whether it is this ticket's before you plan anew):`);
+  for (const branch of work.branches) ctx.out.print(`  branch ${branch}`);
+  for (const commit of work.commits) ctx.out.print(`  commit ${commit}`);
 }
 
 export const commands = [
@@ -56,7 +79,8 @@ export const commands = [
       if (source === 'local' && !exists) {
         throw preconditionError(`The ticket file ${file} of ${ticket} does not exist (tickets.source local).`, `Check the key with the user, or ask them to add ${file}.`);
       }
-      emit(ctx, { ticket, source, file, exists }, (value) => printTicketContext(ctx, value));
+      const work = source === 'notes' ? null : existingWork(ws, ticket);
+      emit(ctx, { ticket, source, file, exists, work }, (value) => printTicketContext(ctx, value));
     },
   },
   {
@@ -88,18 +112,24 @@ export const commands = [
       // A blocked implementer waits for the answer, which may change the spec (O7).
       const waiting = task.phase === 'implement' && readRoundFile(ws, task, 'report').data?.status === 'blocked';
       // After an approval (still in review until the first pr command) a change restarts the cycle (O8).
-      const approved = task.phase === 'review' && readRoundFile(ws, task, 'review').data?.status === 'approved';
+      const reviewStatus = task.phase === 'review' ? readRoundFile(ws, task, 'review').data?.status : null;
+      const approved = reviewStatus === 'approved';
+      // A review that requested changes is finished: the user's decisions on its findings may change the
+      // spec, and the returned round works from it (ADR 0015).
+      const requested = reviewStatus === 'changes_requested';
       if (task.phase === 'implement' && !waiting) {
         throw preconditionError(`Task ${task.id} is in implement; the implementer works from the current spec.`, `Wait for its report (cw report show --task ${task.id}); the spec can change while the report is blocked.`);
       }
-      if (task.phase === 'review' && !approved) {
-        throw preconditionError(`Task ${task.id} is in review; the reviewer checks against the current spec.`, `Wait for the review (cw review show --task ${task.id}); the spec can change once it is approved, after an escalation, or while a report is blocked.`);
+      if (task.phase === 'review' && !approved && !requested) {
+        throw preconditionError(`Task ${task.id} is in review; the reviewer checks against the current spec.`, `Wait for the review (cw review show --task ${task.id}); the spec can change once it is saved, after an escalation, or while a report is blocked.`);
       }
       const { task: updated } = updateTask(ws, task.id, (current) => {
         if (['classify', 'confirm'].includes(current.phase)) {
           transition(current, 'spec', { note: 'spec changed', by: 'cw spec save' });
           current.complexity = null;
           current.confirmation = null;
+        } else if (requested) {
+          current.specRevised = true;
         } else if (['deliver', 'escalated', 'review'].includes(current.phase)) {
           current.specChanged = true;
         }
@@ -113,7 +143,9 @@ export const commands = [
         : `SendMessage ${implementer ?? '<implementer agentId>'} (the same implementer) the answer and that the spec and its brief ${brief} changed`;
       const next = updated.specChanged
         ? `cw task return --task ${task.id} --spec-changed --note "<what changed>"`
-        : waiting
+        : requested
+          ? `cw spec lint --task ${task.id}, then cw task return --task ${task.id}: the returned round works from the new spec`
+          : waiting
           ? `cw spec lint --task ${task.id}, then ${answer}`
           : `cw spec lint --task ${task.id}`;
       emit(ctx, { task: task.id, file, phase: updated.phase, next }, (value) => ctx.out.print(`Saved ${value.file}. Next: ${value.next}`));

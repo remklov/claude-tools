@@ -20,7 +20,7 @@ cw task end --task <id> --outcome done
 - `--note "<text>"` for anything the record should keep.
 - Other endings: `--outcome escalated` after the user stopped an escalation, `--outcome aborted` when the user dropped the task (then `cw task cleanup --task <id>` afterwards if it was not run).
 
-After `cw task end` the edit guard releases this session: it is a normal session again.
+After `cw task end` the edit guard releases this session: it is a normal session again. Its output lists the findings the user wants a ticket for, and notes that the next ticket or other work is cheaper in a new session: this one carries the whole task into every further call (ADR 0014).
 
 ## 3. Report to the user
 
@@ -30,4 +30,4 @@ At most five lines, in the user's language:
 2. Complexity and the one-sentence reason (and an override, if there was one).
 3. Implementer rounds and review rounds (`cw task show --task <id>`).
 4. The PR/MR link, or why there is none.
-5. What the user still has to do: manual checks from the open points, risks, follow-ups.
+5. What the user still has to do: manual checks from the open points, risks, the tickets `cw task end` listed. Then one sentence: for the next ticket, `/clear` (or a new session) and the ticket command there.

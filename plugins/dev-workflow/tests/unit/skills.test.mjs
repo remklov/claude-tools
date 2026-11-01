@@ -67,9 +67,11 @@ const REQUIRED = {
     'git foreign-commits': ['task'],
     'task review': ['task', 'new-agent'],
     'review show': ['task'],
+    // ADR 0015: the user's decision on each marked finding.
+    'review decide': ['task', 'finding', 'as', 'note'],
     'task return': ['task', 'spec-changed', 'continue', 'note', 'new-agent'],
     'pr title': ['task'],
-    'pr body': ['task', 'stdin'],
+    'pr body': ['task', 'what', 'stdin'],
     'pr command': ['task'],
     'pr record': ['task', 'url', 'skipped'],
     'task cleanup': ['task'],
@@ -317,6 +319,8 @@ const PLACEHOLDERS = {
   '<pack>:<script>': 'vitest:no-focus',
   '<commit>': 'HEAD',
   '<commit>:<file>': 'HEAD:src/sum.mjs',
+  '<F>': 'F1',
+  '<scratchpad>/<id>-what-1.md': 'what-1.md',
 };
 const PLACEHOLDER = /<[^<>\s]+>/;
 
