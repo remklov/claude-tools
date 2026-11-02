@@ -24,7 +24,7 @@ followed by a JSON fence.
 Call the Agent tool with that JSON as it is:
 
 - `subagent_type` (`dev-workflow:implementer-<level>`), `description` and `prompt` unchanged;
-- `run_in_background: false` where the Agent tool has that parameter, so the call returns when the implementer has ended; without it (the interactive CLI, the Desktop app) the implementer runs in the background, and its report arrives later as a message (ground rule 10);
+- `run_in_background: false` where the Agent tool has that parameter, so the call returns when the implementer has ended; without it (the interactive CLI, the Desktop app) the implementer runs in the background, and its report arrives later as a message (ground rule 11);
 - `isolation: "worktree"` only when it is printed (worktree mode); never add it yourself;
 - nothing else: no `model`, no `effort`, no extra text in the prompt. The brief file carries everything.
 
