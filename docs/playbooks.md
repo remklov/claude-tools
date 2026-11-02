@@ -44,7 +44,7 @@ The main session becomes the orchestrator of one task until `cw task end`. Its g
 | O3 Spec | Task, ticket snapshot, spec with Risks and deploy steps, lint | `task new`, `ticket save`, `spec save`, `spec lint` |
 | O4 Classify | Packages, areas, minimum; the chosen level with a reason | `classify`, `classify --set --why [--override]` |
 | O5 Confirm | For the levels in `workflow.confirm` | `task confirm --note` |
-| O6 Delegate | The implementer Agent call; SubagentStart records its id (`task agent` only when a command says it recorded none). A complexity in `workflow.selfImplement` (default `s`): the orchestrator implements it itself in the task's work tree, and the reviewer stays an agent ([ADR 0019](adr/0019-orchestrator-implements-small-tasks.md)) | `task start [--agent]`, then for itself `ws setup`, `test`, `checks`, `commit msg --commit`, `prove`, `report save` |
+| O6 Delegate | The implementer Agent call; SubagentStart records its id (`task agent` only when a command says it recorded none) | `task start` |
 | O7 Report | One call: a done report is shown, foreign commits are checked, the review starts → O8; blocked → answer; misclassified → reclassify and reset | `task review`, `report show`, `classify`, `task reset [--keep --note]`, `task start --new-agent` |
 | O8 Review loop | Review rounds; the user decides on the marked findings ([ADR 0015](adr/0015-user-decides-review-findings.md)); findings back, escalation | `review show`, `review decide --finding --as --note`, `task return [--spec-changed \| --continue] [--new-agent]` |
 | O9 Deliver | Body around the orchestrator's summary, commands, confirmation, push and PR/MR, record | `pr body --what <file> [--stdin]`, `pr command`, `pr title`, `pr record --url \| --skipped` |

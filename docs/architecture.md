@@ -56,7 +56,7 @@ every cw call ──▶ <git common dir>/dev-workflow/   state.json · tasks/<id
 |---|---|
 | Setup and inspection | `version`, `config show\|validate`, `init`, `doctor`, `playbook show`, `rules build\|list\|show\|applicable` |
 | Orchestrator | `playbook read`, `task new\|list\|show\|confirm\|agent\|start\|review\|return\|reset\|cleanup\|end`, `ticket context\|save`, `spec save\|show\|lint`, `classify`, `report show`, `review show\|decide`, `git foreign-commits`, `pr title\|body\|command\|record` |
-| Implementer | `ws setup`, `context`, `test`, `checks`, `commit msg [--commit]`, `commit lint`, `prove`, `report save`, `step`, `run` |
+| Implementer | `ws setup`, `context`, `test`, `checks`, `commit msg`, `commit lint`, `prove`, `report save`, `step`, `run` |
 | Reviewer | `review scope`, `review save` (plus `checks`, `prove --recheck`, `rules applicable`, `commit lint` of the other groups) |
 
 | Exit | Meaning |
@@ -190,7 +190,7 @@ The ticket snapshot, the spec, a corrected PR/MR body, the report and the review
 | O1–O2 | orchestrator | `cw doctor --quick`, `cw task list --ticket <KEY>`, `cw ticket context --ticket <KEY>`, one ticket read (Jira or Linear through their MCP, or the local file) and the context file, AskUserQuestion |
 | O3 | orchestrator | `cw task new …` (task dir, phase spec, owner session), `cw ticket save`, `cw spec save`, `cw spec lint` |
 | O4–O5 | orchestrator | `cw classify`, `cw classify --set <c> --why "…"`, `cw task confirm` if required |
-| O6 | orchestrator, hook | `cw task start` writes the brief and prints the Agent call; SubagentStart records the agent (ADR 0014). For `workflow.selfImplement` the orchestrator runs the implementer's steps itself, in its own worktree in worktree mode (ADR 0019) |
+| O6 | orchestrator, hook | `cw task start` writes the brief and prints the Agent call; SubagentStart records the agent (ADR 0014) |
 | 1–8 | implementer | `cw ws setup`, `cw context`, tests, `cw rules applicable`, `cw checks --changed`, `cw commit msg`, `git commit -F`, `cw commit lint`, `cw prove`, `cw report save`; SubagentStop lets it end |
 | O7–O8 | orchestrator | `cw task review` (the done report, the foreign-commit check, then the Agent call or SendMessage), later `cw review show`, `cw review decide` for the findings the user decides on (ADR 0015); changes requested or a fix decision: `cw task return`, back to O7 |
 | R1–R8 | reviewer | `cw review scope`, `cw checks --changed`, `cw prove --recheck`, `cw rules applicable`, `cw commit lint`, `cw review save` |

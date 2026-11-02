@@ -96,12 +96,6 @@ function printDelegation(ctx, value) {
   const { out } = ctx;
   if (value.report) printReport(out, value.report);
   if (value.foreign && !value.foreign.clean) printForeign(out, value.foreign);
-  if (value.selfImplement) {
-    const { complexity, brief, findings } = value.selfImplement;
-    out.print(findings
-      ? `You implement this task yourself (ADR 0019). Fix these, as steps 3 to 8 of cw playbook read steps/o6-self.md describe:\n${findings.join('\n')}`
-      : `You implement this task yourself: complexity ${complexity} is in workflow.selfImplement (ADR 0019). Follow cw playbook read steps/o6-self.md; the brief is ${brief}. To delegate it instead: cw task start --task ${value.task} --new-agent.`);
-  }
   if (value.freshAgent) out.print(`A fresh ${value.role}: ${value.freshAgent}.`);
   if (value.context?.unmeasured) out.print(value.context.unmeasured);
   if (value.agentCall) {
@@ -172,8 +166,6 @@ function start(ctx) {
   if (ws.mode === 'in-place') requireFreeWorkTree(ws, task);
   requireCleanSpec(ws, task);
   const base = resolveBase(ws, ctx.flags.base ?? ws.config.git.defaultBase);
-  // The orchestrator implements the complexities of workflow.selfImplement itself (ADR 0019).
-  const self = ws.config.workflow.selfImplement.includes(task.complexity) && !ctx.flags.agent;
   // A same-named branch that exists now and is not kept for the task is not cw's: reset must not delete it.
   const branchNow = branchExists(ws.mode === 'in-place' ? ws.workRepo : mainCheckout(ws), task.branch);
   const { task: started, brief } = delegateImplementer(ws, task, (current) => {
@@ -184,7 +176,6 @@ function start(ctx) {
     current.agents.implementer = null;
     current.previousComplexity = null;
     current.returnedWith = null;
-    current.self = self;
     // A branch kept with cw task reset --keep (or handed over) is continued. One that only task cleanup
     // saw is not: ws setup then refuses a same-named branch that cw did not create.
     if (!['keep', 'handover'].includes(current.resumeBranchBy)) setResumeBranch(current, false);
@@ -203,9 +194,8 @@ function start(ctx) {
     brief: brief.path,
     rules: brief.rules,
     procedures: brief.procedures,
-    ...(self
-      ? { selfImplement: { complexity: started.complexity, brief: brief.path }, next: [`cw ws setup --task ${started.id}`, `cw task review --task ${started.id} once your report is saved`] }
-      : { agentCall: agentCall(ws, started, 'implementer', brief.path), next: [`cw task review --task ${started.id}`] }),
+    agentCall: agentCall(ws, started, 'implementer', brief.path),
+    next: [`cw task review --task ${started.id}`],
   };
   emit(ctx, value, () => printDelegation(ctx, value));
 }
@@ -231,7 +221,6 @@ function restartImplementer(ctx, ws, task) {
       agentSwitch: { role: 'implementer', reason: 'new-agent', previous },
     });
     current.steps = freshSteps();
-    current.self = false;
     forgetImplementer(ws, current, released);
     if (ws.mode === 'in-place') setResumeBranch(current, resume, 'handover');
   }, { fresh: true });
@@ -261,7 +250,6 @@ function nextForReport(task, report) {
   const agent = task.agents.implementer?.id ?? '<implementer agentId>';
   if (report.status === 'done') return [`cw task review --task ${task.id}`];
   if (report.status === 'blocked') {
-    if (task.self) return [`ask the user, put the answer into the spec (cw spec save --task ${task.id}), go on with the work and save the report again`];
     if (staleAgent(task, 'implementer')) {
       return [`answer from the spec and the code, else ask the user; put the answer into the spec (cw spec save --task ${task.id}), then start a fresh implementer: ${freshImplementer(task)} (${staleReason(task, 'implementer')})`];
     }
@@ -271,7 +259,6 @@ function nextForReport(task, report) {
 }
 
 function missingReportFix(task) {
-  if (task.self) return `You implement this task yourself: finish with cw report save --task ${task.id} (cw playbook read steps/o6-self.md, step 8).`;
   const agent = task.agents.implementer?.id;
   if (!agent) return `Wait for the implementer to finish; it ends with cw report save. If no implementer runs (its Agent call was lost or denied), start one: ${freshImplementer(task)}.`;
   if (staleAgent(task, 'implementer')) return `Start a fresh implementer: ${freshImplementer(task)} (${staleReason(task, 'implementer')}).`;
@@ -285,7 +272,7 @@ function reportShow(ctx) {
   const { path, data: report } = readRoundFile(ws, task, 'report');
   if (!report) throw preconditionError(`There is no report for round ${task.round} yet (${path}).`, missingReportFix(task));
   stamp(ws, task, 'implementer');
-  const unrecorded = task.self ? null : unrecordedAgent(task, 'implementer');
+  const unrecorded = unrecordedAgent(task, 'implementer');
   const value = { task: task.id, round: task.round, file: path, ...report, warnings: [...report.warnings, ...(unrecorded ? [unrecorded] : [])], next: nextForReport(task, report) };
   emit(ctx, value, () => {
     printReport(ctx.out, value);
@@ -415,7 +402,7 @@ function review(ctx) {
   const message = movedFrom
     ? reviewerRecheck(task, brief.path, movedFrom)
     : reviewerFollowUp(task, brief.path, reportFile.path, previous.data?.head ?? task.base.commit);
-  const unrecorded = report && !loaded.self ? unrecordedAgent(loaded, 'implementer') : null;
+  const unrecorded = report ? unrecordedAgent(loaded, 'implementer') : null;
   if (unrecorded) ctx.out.warn(unrecorded);
   const value = {
     task: task.id,
@@ -598,11 +585,9 @@ function giveBack(ctx) {
   requireActive(task);
   const mode = returnMode(ctx);
   const review = checkReturn(ws, task, mode, ctx);
-  // A task the orchestrator implements itself stays its own unless --new-agent hands it to an agent.
-  const self = Boolean(task.self) && !ctx.flags['new-agent'];
-  const { reason: fresh, why, switch: agentSwitch, context } = self ? { reason: null } : freshImplementerReason(ws, task, ctx);
+  const { reason: fresh, why, switch: agentSwitch, context } = freshImplementerReason(ws, task, ctx);
   const implementer = task.agents.implementer?.id;
-  if (!self && !fresh && !implementer) {
+  if (!fresh && !implementer) {
     throw preconditionError(`No implementer agent is recorded for ${task.id}, so there is nobody to send the message to.`, `Start a fresh one: cw task return --task ${task.id}${mode === 'spec' ? ' --spec-changed --note "…"' : mode === 'continue' ? ' --continue --note "…"' : ''} --new-agent.`);
   }
   const note = ctx.flags.note ?? null;
@@ -630,17 +615,11 @@ function giveBack(ctx) {
     }
     if (ws.mode === 'in-place') setResumeBranch(current, resume, 'handover');
     if (fresh) forgetImplementer(ws, current, released);
-    current.self = self;
-    // The orchestrator's own worktree is gone after task cleanup: ws setup adds it again on the branch.
-    if (self && ws.mode === 'worktree' && !(current.workTree && existsSync(current.workTree))) {
-      current.workTree = null;
-      setResumeBranch(current, true, 'handover');
-    }
   }, { fresh: Boolean(fresh) });
   // A PR/MR body written for the earlier state must not be reused (cw pr command reuses an existing one).
   if (task.phase === 'deliver') rmSync(prBodyPath(ws, back), { force: true });
   let message = null;
-  if (!fresh && !self) {
+  if (!fresh) {
     message = mode === 'spec'
       ? specChangedMessage(back, note, brief.path, { setupFirst: resume })
       : returnMessage({ ...back, reviewRound }, review?.data, brief.path, { decision: mode === 'continue' ? note : null, setupFirst: resume });
@@ -656,10 +635,8 @@ function giveBack(ctx) {
     findings: review ? findingsToFix(review.data, back.decisions) : [],
     releasedWorktree: handover.released,
     ...(context ? { context } : {}),
-    ...(self
-      ? { selfImplement: { complexity: back.complexity, brief: brief.path, findings: review ? findingsToFix(review.data, back.decisions) : [`The spec changed: ${note ?? ''}`] } }
-      : fresh ? { freshAgent: fresh, agentCall: agentCall(ws, back, 'implementer', brief.path) } : { sendMessage: { to: implementer, message } }),
-    next: [...(self && !back.workTree ? [`cw ws setup --task ${back.id}`] : []), `cw task review --task ${back.id}${self ? ' once your report is saved' : ''}`],
+    ...(fresh ? { freshAgent: fresh, agentCall: agentCall(ws, back, 'implementer', brief.path) } : { sendMessage: { to: implementer, message } }),
+    next: [`cw task review --task ${back.id}`],
   };
   emit(ctx, value, () => printDelegation(ctx, value));
 }
@@ -741,9 +718,9 @@ export const commands = [
   {
     path: ['task', 'start'],
     group: 'orchestrator',
-    usage: 'cw task start --task <id> [--base <branch>] [--agent] | cw task start --task <id> --new-agent',
-    summary: 'Start an implementer round: record the base, write the brief, print the exact Agent call, or the self-implementation for workflow.selfImplement (O6); --agent delegates anyway; --new-agent replaces a lost implementer or hands your own work to one',
-    flags: { task: 'string', base: 'string', agent: 'boolean', 'new-agent': 'boolean' },
+    usage: 'cw task start --task <id> [--base <branch>] | cw task start --task <id> --new-agent',
+    summary: 'Start an implementer round: record the base, write the brief, print the exact Agent call (O6); --new-agent replaces a lost implementer',
+    flags: { task: 'string', base: 'string', 'new-agent': 'boolean' },
     run: start,
   },
   {
