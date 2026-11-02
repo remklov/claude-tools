@@ -29,7 +29,7 @@ Two more skills serve the user: `/dev-workflow:status` summarizes the tasks (`cw
 
 ## Orchestrator (`/dev-workflow:ticket`)
 
-The main session becomes the orchestrator of one task until `cw task end`. Its ground rules:
+The main session becomes the orchestrator of one task until `cw task end`. The skill sets `effort: high` for the turn it starts: the spec phase from the ticket to the implementer's start, which stays one turn because questions go through AskUserQuestion. Later turns (report, review, delivery) run at the session's effort ([ADR 0020](adr/0020-spec-phase-at-high-effort.md)). Its ground rules:
 
 - It never edits the project's files; the guard G-ORCH-EDIT refuses Edit, Write and NotebookEdit of project files in the session that owns an active task. The ticket snapshot, the spec and a corrected PR/MR body reach `cw` on stdin from a file it writes into its scratchpad directory (a heredoc with JSON makes Claude Code ask).
 - It never uses `cd` (guard G-CD): absolute paths, and git in the form `cw` prints (in in-place mode `git -C <appRoot> …` relative to the project root).
