@@ -348,20 +348,3 @@ test('the command matchers', () => {
   assert.equal(isDevServer(['yarn', 'exec', 'vite']), true);
   assert.equal(isDevServer(['vite', 'optimize']), false);
 });
-
-test('a task the orchestrator implements itself opens only its work tree, with the implementer\'s guards (ADR 0019)', (t) => {
-  const base = { id: 'NO-TICKET__feature__mul', outcome: null, ownerSession: 's1', self: true };
-  const { root, check, bash } = project(t, { mode: 'worktree', tasks: [{ ...base, phase: 'implement', workTree: null }] });
-  const workTree = join(root, '.claude', 'worktrees', 'self-NO-TICKET__feature__mul');
-  mkdirSync(join(workTree, 'src'), { recursive: true });
-  assert.equal(check(MAIN, 'Edit', { file_path: join(workTree, 'src', 'a.mjs') })?.id, 'G-ORCH-EDIT', 'before ws setup there is no work tree to open');
-  write(root, { '.git/dev-workflow/state.json': { version: 1, tasks: [{ ...base, phase: 'implement', workTree }] } });
-  assert.equal(check(MAIN, 'Edit', { file_path: join(workTree, 'src', 'a.mjs') }), null, 'its own work tree');
-  assert.equal(check(MAIN, 'Write', { file_path: join(root, 'src', 'a.mjs') })?.id, 'G-ORCH-EDIT', 'the main checkout stays closed');
-  assert.equal(bash(MAIN, 'git push origin HEAD'), 'G-PUSH', 'no push while it implements');
-  assert.equal(bash(MAIN, 'npm install left-pad'), 'G-DEPS');
-  assert.equal(bash(MAIN, 'cw checks --changed --task NO-TICKET__feature__mul'), null);
-  write(root, { '.git/dev-workflow/state.json': { version: 1, tasks: [{ ...base, phase: 'review', workTree }] } });
-  assert.equal(check(MAIN, 'Edit', { file_path: join(workTree, 'src', 'a.mjs') })?.id, 'G-ORCH-EDIT', 'in review the reviewer has the work tree');
-  assert.equal(bash(MAIN, 'git push origin HEAD'), null, 'delivery pushes after the user confirmed');
-});

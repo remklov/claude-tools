@@ -75,8 +75,8 @@ function singleCommand(ws, target) {
   return singleTestCommand(runner.template, { file: target.testFile, name: target.name });
 }
 
-// One test in the task's work tree, through the package's single-test command (cw test): no cd, so the
-// orchestrator of a self-implemented task and an agent run it the same way (ADR 0019).
+// One test in the task's work tree, through the package's single-test command (cw test): the agent needs
+// no cd into a package directory, which worktree-isolated agents could not run as a subshell.
 export async function runSingleTest({ ws, task, test, timeoutMs }) {
   const workTree = requireWorkTree(ws, task);
   const target = parseTestSpec(ws.config, test);

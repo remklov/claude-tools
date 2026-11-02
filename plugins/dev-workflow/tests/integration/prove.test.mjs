@@ -374,3 +374,19 @@ test('worktree mode: the proof runs in the agent worktree, from the main checkou
   assert.equal(broken.code, 3);
   assert.match(broken.stderr, /Fix: Check base\.commit in task\.json \(git cat-file -t f{40}\)/, 'plain git inside the worktree (D5)');
 });
+
+test('cw test runs one test in the task work tree from any cwd, with the package single-test command', (t) => {
+  const { fx, id, app } = committedFix(t);
+  const run = (cwd, args) => cw(cwd, ['test', '--task', id, ...args], { env: fx.env });
+  for (const cwd of [fx.root, join(fx.app, 'src')]) {
+    const passed = run(cwd, ['--test', 'app:src/sum3.test.mjs', '--json']);
+    assert.equal(passed.code, 0, passed.stderr);
+    assert.deepEqual([passed.json().passed, passed.json().command, passed.json().cwd], [true, 'node --test src/sum3.test.mjs', '.']);
+  }
+  write(fx.app, { 'src/sum.mjs': 'export const sum = () => 0;\n' });
+  app('commit', '-qam', '[TASK] Break sum');
+  const failed = run(fx.root, ['--test', 'app:src/sum3.test.mjs']);
+  assert.equal(failed.code, 1);
+  assert.match(failed.stdout, /^app:src\/sum3\.test\.mjs: fail \(exit 1\) · node --test src\/sum3\.test\.mjs in \.\n/);
+  assert.equal(run(fx.root, []).code, 2, '--test is required');
+});

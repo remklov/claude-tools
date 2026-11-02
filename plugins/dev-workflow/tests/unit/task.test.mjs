@@ -75,7 +75,7 @@ test('create, update with a revision check, and the state.json index', (t) => {
   assert.equal(state.tasks.length, 1);
   assert.deepEqual(Object.keys(state.tasks[0]).sort(), [
     'agents', 'areas', 'branch', 'complexity', 'cycle', 'descriptions', 'endedAt', 'id', 'maxReviewRounds', 'outcome',
-    'ownerSession', 'packages', 'phase', 'prUrl', 'reviewRound', 'round', 'self', 'steps', 'ticket', 'title', 'updatedAt', 'workTree',
+    'ownerSession', 'packages', 'phase', 'prUrl', 'reviewRound', 'round', 'steps', 'ticket', 'title', 'updatedAt',
   ]);
   assert.equal(state.tasks[0].phase, 'classify');
   assert.deepEqual(activeTasksOwnedBy(ws, 's1').map((entry) => entry.id), [task.id]);

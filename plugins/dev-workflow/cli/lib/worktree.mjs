@@ -1,7 +1,7 @@
 // Claude Code's agent worktrees (D5, S4): where the main checkout is, and how cw removes a clean task
 // worktree with its agent branch. Used by task reset, the agent handover of task return and task
 // cleanup. No command here rewrites .git/config (§8).
-import { existsSync, lstatSync, mkdirSync, realpathSync, symlinkSync, unlinkSync } from 'node:fs';
+import { lstatSync, realpathSync, unlinkSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { branchExists, deleteBranch, git, gitResult } from './git.mjs';
 import { quote } from './host/index.mjs';
@@ -38,30 +38,6 @@ export function mainCheckout(ws) {
 // The agent branch Claude Code created for a worktree: recorded by ws setup, else from the directory name.
 export const agentBranchOf = (task) =>
   task.agentBranch ?? (task.workTree && basename(task.workTree).startsWith('agent-') ? `worktree-${basename(task.workTree)}` : null);
-
-// The worktree cw creates for a task the orchestrator implements itself (ADR 0019), next to Claude
-// Code's agent worktrees.
-export const selfWorktreePath = (ws, task) => join(mainCheckout(ws), '.claude', 'worktrees', `self-${task.id}`);
-
-// Links the main checkout's node_modules into a new worktree, at the root and in every package, as
-// Claude Code's worktree.symlinkDirectories does for agent worktrees; the links stay untracked.
-export function linkPackageModules(ws, mainRoot, workTree) {
-  const linked = [];
-  for (const dir of [...new Set(['.', ...ws.config.packages.map((pkg) => pkg.path)])]) {
-    const source = join(mainRoot, dir, 'node_modules');
-    const target = join(workTree, dir, 'node_modules');
-    if (!existsSync(source) || existsSync(target) || !existsSync(join(workTree, dir))) continue;
-    symlinkSync(source, target, 'dir');
-    linked.push(target);
-  }
-  return linked;
-}
-
-// Adds the worktree on the task branch: a new branch at base, or the existing one to continue.
-export function addSelfWorktree(mainRoot, path, { branch, base, existing }) {
-  mkdirSync(dirname(path), { recursive: true });
-  worktreeGit(mainRoot, ['add', '--quiet', ...(existing ? [path, branch] : ['-b', branch, path, base])]);
-}
 
 // Untracked node_modules symlinks (worktree.symlinkDirectories, S4): `git worktree remove` without
 // --force refuses a worktree that has them, and unlinking removes only the link.

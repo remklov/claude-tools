@@ -369,17 +369,12 @@ export function isDevServer(argv) {
 
 // --- the catalog --------------------------------------------------------------------------------------
 
-// The owned task the orchestrator implements itself right now (ADR 0019): its work tree is open to it.
-const selfImplementing = (owned) => owned.find((entry) => entry.self && entry.phase === 'implement' && entry.workTree) ?? null;
-
 function orchestratorEdit({ input, ws }) {
   const owned = activeTasksOwnedBy(ws, input.session_id);
   if (!owned.length) return null;
   const file = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
   // Files outside the project (scratch files, Claude Code's own memory) are not the task's code.
   if (file && !literalInsideRoots(file, ws.cwd, projectRoots(ws))) return null;
-  const self = selfImplementing(owned);
-  if (file && self && literalInsideRoots(file, ws.cwd, [canonical(self.workTree)])) return null;
   const task = owned[0];
   const others = owned.length > 1 ? ` (and ${owned.slice(1).map((entry) => entry.id).join(', ')})` : '';
   return deny('G-ORCH-EDIT', `this session orchestrates task ${task.id}${others} (phase ${task.phase}), so it does not edit project files itself (D3). Delegate the change: in implement the implementer does it (SendMessage to it, or the Agent call cw prints); put text into the task through cw on stdin (cw spec save --task ${task.id}); or, after asking the user, end the task first with cw task end --task ${task.id} --outcome <done|escalated|aborted>, then edit.`);
@@ -459,8 +454,7 @@ export function evaluate({ input, ws, guards }) {
   }
   if (tool === 'Agent') return agentParams({ input, ws });
   if (tool !== 'Bash') return null;
-  // The orchestrator that implements a task itself is held to the implementer's guards (ADR 0019).
-  const role = roleOf(input.agent_type) ?? (!input.agent_id && selfImplementing(activeTasksOwnedBy(ws, input.session_id)) ? 'implementer' : null);
+  const role = roleOf(input.agent_type);
   const roots = role === 'reviewer' ? projectRoots(ws) : [];
   let cwd = canonical(input.cwd || ws.cwd);
   for (const command of parseShell(input.tool_input?.command)) {

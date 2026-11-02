@@ -62,9 +62,6 @@ const REQUIRED = {
     'task confirm': ['task', 'note'],
     'task start': ['task', 'new-agent'],
     'task agent': ['task', 'role', 'id'],
-    // ADR 0019: the orchestrator's own implementation of a small task.
-    test: ['task', 'test'],
-    'commit msg': ['task', 'summary', 'keyword', 'commit'],
     'report show': ['task'],
     'task reset': ['task', 'keep', 'note'],
     'git foreign-commits': ['task'],

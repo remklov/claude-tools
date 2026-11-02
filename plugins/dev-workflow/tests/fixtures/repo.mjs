@@ -64,8 +64,6 @@ export const inPlaceConfig = (overrides = {}) => ({
   packs: [],
   packages: [{ id: 'app', path: '.', areas: ['backend'], checks: { test: 'node --test' } }],
   git: { noTicketKey: 'NO-TICKET' },
-  // The cycle tests delegate every complexity; the self-implementation tests set it (ADR 0019).
-  workflow: { selfImplement: [] },
   ...overrides,
 });
 
@@ -76,8 +74,6 @@ export const worktreeConfig = (overrides = {}) => ({
   packs: [],
   packages: [{ id: 'app', path: '.', areas: ['backend'], checks: { test: 'node --test' } }],
   git: { noTicketKey: 'NO-TICKET' },
-  // The cycle tests delegate every complexity; the self-implementation tests set it (ADR 0019).
-  workflow: { selfImplement: [] },
   ...overrides,
 });
 
