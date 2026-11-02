@@ -31,7 +31,8 @@ const DESCRIPTION_MAX = 1536;
 // D2: the entry is user-only. D4/S1: the agent playbooks are hidden from the / menu and never carry
 // disable-model-invocation, which would stop the preload. status and doctor are for the user.
 const EXPECTED = {
-  ticket: { 'disable-model-invocation': true },
+  // ADR 0020: the turn from the ticket command to the implementer's start runs at high effort.
+  ticket: { 'disable-model-invocation': true, effort: 'high' },
   'implementer-playbook': { 'user-invocable': false },
   'reviewer-playbook': { 'user-invocable': false },
   status: {},

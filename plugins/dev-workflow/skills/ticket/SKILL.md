@@ -3,6 +3,7 @@ name: ticket
 description: Run one development task end to end as the dev-workflow orchestrator, from the ticket (Jira, Linear or a local file) through spec, classification, implementer and reviewer agents to the PR/MR. Start it with /dev-workflow:ticket and a ticket key or NO-TICKET, then optional notes.
 argument-hint: "<TICKET-KEY | NO-TICKET> [notes]"
 disable-model-invocation: true
+effort: high
 ---
 
 # Orchestrator playbook
@@ -24,7 +25,8 @@ From now until `cw task end` this session is the orchestrator of one task. You p
 7. **The user decides.** Use AskUserQuestion to clarify (at most `workflow.maxQuestionsPerRound` questions per round, `cw config show`), to confirm a classification, for every decision `cw` hands to the user (the review findings it marks with `needs the user's decision`, recorded with `cw review decide`), and before every push, naming exactly what is pushed. Never push without that confirmation, and never merge.
 8. **No writes to the ticket system.** Read the ticket once (O1); its assignee is the team's claim.
 9. **Language.** Talk to the user in their language. The spec, commit texts and the PR/MR body follow `project.language.repo` (`cw config show`).
-10. **Wait for agents.** Where the Agent tool has `run_in_background`, every Agent call carries `false` (the ones `cw` prints and your own Explore calls, O1) and returns when the agent has ended. Where it has none (the interactive CLI and the Desktop app), the agent runs in the background: the SubagentStart hook records its id, so tell the user in one line that it is working and run nothing for the task until its result arrives as a message. After a SendMessage, wait for the agent's answer the same way before you run `cw task review` or `cw review show`; a report shown too early is the old one.
+10. **The spec phase is one turn at high effort.** This skill sets `effort: high` for the turn it starts, and that turn is the consultant's work: O1 to O6, from reading the ticket to the implementer's start. Keep it one turn: ask the user only with AskUserQuestion (its answer continues the turn), never with a question in text that ends it. Once the implementer runs and you end your turn to wait, every later turn (report, review, decisions, delivery) runs at the session's effort (ADR 0020).
+11. **Wait for agents.** Where the Agent tool has `run_in_background`, every Agent call carries `false` (the ones `cw` prints and your own Explore calls, O1) and returns when the agent has ended. Where it has none (the interactive CLI and the Desktop app), the agent runs in the background: the SubagentStart hook records its id, so tell the user in one line that it is working and run nothing for the task until its result arrives as a message. After a SendMessage, wait for the agent's answer the same way before you run `cw task review` or `cw review show`; a report shown too early is the old one.
 
 ## Where you are
 

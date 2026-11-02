@@ -18,7 +18,7 @@ Do not ask what you can read in the code, and do not ask for confirmation of thi
 
 ## How to ask
 
-- AskUserQuestion, at most `workflow.maxQuestionsPerRound` questions per round (`cw config show`; default 4).
+- AskUserQuestion, at most `workflow.maxQuestionsPerRound` questions per round (`cw config show`; default 4). Never a question in text: it would end the turn that runs at high effort (ground rule 10).
 - Each question offers concrete options, your recommended one first, so the user can answer with one click.
 - Several rounds are fine; stop as soon as every acceptance criterion is testable.
 - Note every answer: it goes into the spec (O3) as a requirement, an acceptance criterion, a non-goal or context.

@@ -23,5 +23,6 @@ The architecture decisions D1 to D12 of the first build are in `docs/PLAN.md` §
 | [0017](0017-rule-hints.md) | `cw checks` prints rule hints from the diff |
 | [0018](0018-verify-unchanged-state-once.md) | The review verifies an unchanged state once: `cw checks` reuses a passing run of the same content, `cw prove --recheck` a proof of the same commit (`--fresh` runs again) |
 | [0019](0019-orchestrator-implements-small-tasks.md) | Withdrawn: the orchestrator implemented small tasks itself, which made them more expensive; `cw test` stays |
+| [0020](0020-spec-phase-at-high-effort.md) | The ticket skill runs its first turn, the spec phase O1 to O6, at effort high; later turns at the session's effort |
 
 A new record takes the next number, the format of the existing ones and a line in this table.
