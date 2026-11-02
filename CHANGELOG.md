@@ -4,13 +4,15 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.8.2 - 2026-11-02
+
 ### Changed
 
-- dev-workflow: the ticket skill sets `effort: high`, which Claude Code applies to the turn the skill starts: the spec phase from the ticket to the implementer's start (O1 to O6), whatever the session's effort. The orchestrator asks only with AskUserQuestion, so that phase stays one turn; later turns run at the session's effort (ADR 0020).
+- The ticket skill sets `effort: high`, which Claude Code applies to the turn the skill starts: the spec phase from the ticket to the implementer's start (O1 to O6), whatever the session's effort. The orchestrator asks only with AskUserQuestion, so that phase stays one turn; later turns run at the session's effort (ADR 0020).
 
 ### Removed
 
-- dev-workflow: the self-implementation of 0.8.0: `workflow.selfImplement`, the orchestrator's own worktree of `cw ws setup`, the G-ORCH-EDIT opening for it and `cw commit msg --commit`. Repriced for the workflow as built, it made `s` tasks 8 % and `m` tasks 22–64 % more expensive than delegating them, because it kept the orchestrator's work and moved only the cheap Sonnet implementer into it (ADR 0019, withdrawn). A config that sets `workflow.selfImplement` must drop the key. `cw test` stays for the implementer.
+- The self-implementation of 0.8.0: `workflow.selfImplement`, the orchestrator's own worktree of `cw ws setup`, the G-ORCH-EDIT opening for it and `cw commit msg --commit`. Repriced for the workflow as built, it made `s` tasks 8 % and `m` tasks 22–64 % more expensive than delegating them, because it kept the orchestrator's work and moved only the cheap Sonnet implementer into it (ADR 0019, withdrawn). A config that sets `workflow.selfImplement` must drop the key. `cw test` stays for the implementer.
 
 ## dev-workflow 0.8.0 - 2026-11-01
 
