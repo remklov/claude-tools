@@ -11,6 +11,7 @@ cw task start --task <id>
 - `--base <branch>` only when the user wants another base than `git.defaultBase`; it must be a local branch of the work repo.
 - It brings the base up to date with origin again before the round starts (ADR 0021). A `Base:` warning means the task starts from the local base: tell the user in one line, as the warning says. The user already decided on the local base in O1.
 - Refusals name their fix: a spec with lint errors, a missing confirmation, a pending reset after a misclassification, or (in-place) another task that holds the app's work tree. Ask the user where the fix needs a decision.
+- An overlap with an open task (the same files, or one area of `workflow.exclusivePaths`; ADR 0022): ask the user in one AskUserQuestion, naming the tasks and files. Start anyway with `cw task start --task <id> --accept-overlap "<the user's reason>"`, or wait: stop and tell the user the task keeps its phase until the other PR is merged.
 
 The output contains the brief file, the selected rules and procedures, and:
 

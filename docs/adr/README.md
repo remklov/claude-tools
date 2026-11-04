@@ -25,5 +25,6 @@ The architecture decisions D1 to D12 of the first build are in `docs/PLAN.md` §
 | [0019](0019-orchestrator-implements-small-tasks.md) | Withdrawn: the orchestrator implemented small tasks itself, which made them more expensive; `cw test` stays |
 | [0020](0020-spec-phase-at-high-effort.md) | The ticket skill runs its first turn, the spec phase O1 to O6, at effort high; later turns at the session's effort |
 | [0021](0021-update-the-base-from-origin.md) | `cw ticket context` and `cw task start` fetch origin and fast-forward the base branch; anything else stays as it is and the user decides (`git.updateBase`) |
+| [0022](0022-overlap-with-open-tasks.md) | `cw task start` refuses a start that shares files or an exclusive area (`workflow.exclusivePaths`) with an open task until the user accepts (`--accept-overlap`) |
 
 A new record takes the next number, the format of the existing ones and a line in this table.

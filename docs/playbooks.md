@@ -44,7 +44,7 @@ The main session becomes the orchestrator of one task until `cw task end`. The s
 | O3 Spec | Task, ticket snapshot, spec with Risks and deploy steps, lint | `task new`, `ticket save`, `spec save`, `spec lint` |
 | O4 Classify | Packages, areas, minimum; the chosen level with a reason | `classify`, `classify --set --why [--override]` |
 | O5 Confirm | For the levels in `workflow.confirm` | `task confirm --note` |
-| O6 Delegate | The base fast-forwarded from origin again (ADR 0021), the implementer Agent call; SubagentStart records its id (`task agent` only when a command says it recorded none) | `task start` |
+| O6 Delegate | The base fast-forwarded from origin again (ADR 0021), the overlap with open tasks for the user to accept ([ADR 0022](adr/0022-overlap-with-open-tasks.md)), the implementer Agent call; SubagentStart records its id (`task agent` only when a command says it recorded none) | `task start` |
 | O7 Report | One call: a done report is shown, foreign commits are checked, the review starts → O8; blocked → answer; misclassified → reclassify and reset | `task review`, `report show`, `classify`, `task reset [--keep --note]`, `task start --new-agent` |
 | O8 Review loop | Review rounds; the user decides on the marked findings ([ADR 0015](adr/0015-user-decides-review-findings.md)); findings back, escalation | `review show`, `review decide --finding --as --note`, `task return [--spec-changed \| --continue] [--new-agent]` |
 | O9 Deliver | Body around the orchestrator's summary, commands, confirmation, push and PR/MR, record | `pr body --what <file> [--stdin]`, `pr command`, `pr title`, `pr record --url \| --skipped` |

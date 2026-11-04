@@ -110,6 +110,11 @@ export function validateConfig(raw) {
     add('$.tickets.contextPath', 'must be a relative path inside the project, without a leading "/" or ".."');
   }
 
+  (raw.workflow?.exclusivePaths ?? []).forEach((glob, i) => {
+    const problem = globError(glob);
+    if (problem) add(`$.workflow.exclusivePaths[${i}]`, problem);
+  });
+
   (raw.complexity?.escalate ?? []).forEach((item, i) => {
     if (!item.paths && !item.keywords) add(`$.complexity.escalate[${i}]`, 'needs paths or keywords');
     (item.paths ?? []).forEach((glob, j) => {
@@ -152,6 +157,7 @@ export function withDefaults(raw) {
       maxReviewRounds: raw.workflow?.maxReviewRounds ?? 3,
       confirm: raw.workflow?.confirm ?? ['l', 'xl'],
       maxQuestionsPerRound: raw.workflow?.maxQuestionsPerRound ?? 4,
+      exclusivePaths: raw.workflow?.exclusivePaths ?? [],
       checkTimeoutMinutes: raw.workflow?.checkTimeoutMinutes ?? 15,
       // null (and 0) switch the rule off, so only a missing key takes the default.
       freshImplementerAboveTokens: raw.workflow?.freshImplementerAboveTokens === undefined ? DEFAULT_FRESH_IMPLEMENTER_ABOVE_TOKENS : raw.workflow.freshImplementerAboveTokens,
