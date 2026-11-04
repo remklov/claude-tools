@@ -137,6 +137,7 @@ export function withDefaults(raw) {
     git: {
       preset: preset.id,
       defaultBase: raw.git?.defaultBase ?? 'main',
+      updateBase: raw.git?.updateBase ?? true,
       noTicketKey: raw.git?.noTicketKey ?? preset.noTicketKey,
       host: raw.git?.host ?? null,
       conventions: preset,
