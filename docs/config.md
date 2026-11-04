@@ -138,6 +138,7 @@ An item needs `paths` or `keywords`, and every glob must compile. The highest `m
 |---|---|---|---|
 | `preset` | `^[a-z][a-z0-9-]*$` | `default` | The conventions file `presets/git/<preset>.json` in the plugin; the name must exist. |
 | `defaultBase` | string | `main` | The branch `cw task start` bases a task on unless `--base` names another; it must exist locally in the work repo. |
+| `updateBase` | boolean | `true` | `cw ticket context` (O1) and `cw task start` fetch `origin` and fast-forward the base branch in the work repo: by `git merge --ff-only` where it is checked out, else by moving the ref. Local commits, a diverged branch, a checkout in another worktree, local changes in the files the update touches or a failed fetch leave it as it is, with a warning on which the user decides ([ADR 0021](adr/0021-update-the-base-from-origin.md)). `false` keeps the local branch as it is. |
 | `noTicketKey` | `^[A-Za-z][A-Za-z0-9-]*$` | the preset's (`maintenance` for `default`) | The key for work without a ticket. It must not match `tickets.keyPattern`. `NO-TICKET` is always accepted as an alias. |
 | `host` | `github` \| `gitlab` | detected | Overrides the host detection from the work repo's `origin` (`github.com` → GitHub, any other host → GitLab). |
 

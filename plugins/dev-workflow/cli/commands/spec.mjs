@@ -10,6 +10,7 @@ import { buildRulebook, ruleIdPrefixes } from '../lib/rules.mjs';
 import { lintSpec } from '../lib/spec.mjs';
 import { isActive, readRoundFile, staleAgent, transition, updateTask } from '../lib/task.mjs';
 import { isNoTicket, normalizeTicketKey, ticketFileOf, validateSnapshot } from '../lib/ticket.mjs';
+import { printBaseUpdate, updateBase } from '../lib/upstream.mjs';
 import { orchestratorTreeOf, taskPath } from '../lib/workspace.mjs';
 import { emit, loadTaskContext, readStdinJson, readStdinText, requireFlag } from './common.mjs';
 
@@ -32,8 +33,8 @@ export function lintTaskSpec(ws, task, book = buildRulebook(ws)) {
 const SOURCE_REFERENCE = { jira: 'reference/jira.md', linear: 'reference/linear.md', local: 'reference/local.md' };
 
 // Earlier work on the ticket (ADR 0016): branches whose name holds the key and commits whose message
-// names it, on every local and remote-tracking branch (cw does not fetch). Someone may have built it
-// already; the ticket's status does not tell. null without a work repo.
+// names it, on every local and remote-tracking branch, as of the fetch before (ADR 0021). Someone may
+// have built it already; the ticket's status does not tell. null without a work repo.
 function existingWork(ws, ticket) {
   const repo = orchestratorTreeOf(ws, null);
   if (!existsSync(repo)) return null;
@@ -47,7 +48,8 @@ function existingWork(ws, ticket) {
   return { branches, commits };
 }
 
-function printTicketContext(ctx, { ticket, source, file, exists, work }) {
+function printTicketContext(ctx, { ticket, source, file, exists, baseUpdate, work }) {
+  printBaseUpdate(ctx.out, baseUpdate, `Ask the user whether to go on with the local ${baseUpdate.branch} or to stop and bring it up to date first.`);
   if (source === 'notes') return ctx.out.print(`${ticket} · no ticket: the command's notes are the ticket.`);
   const reference = `cw playbook read ${SOURCE_REFERENCE[source]}`;
   if (source === 'local') ctx.out.print(`${ticket} · source local: the ticket is ${file} (${reference}).`);
@@ -74,13 +76,15 @@ export const commands = [
       const ws = ctx.workspace();
       const ticket = normalizeTicketKey(ws.config, requireFlag(ctx.flags, 'ticket', 'Pass the ticket key: cw ticket context --ticket <KEY>.'));
       const source = isNoTicket(ws.config, ticket) ? 'notes' : ws.config.tickets.source;
+      // First, so the code the spec reads, the existing work and (worktree mode) the ticket file are origin's.
+      const baseUpdate = updateBase(ws);
       const file = ticketFileOf(ws.config, ticket);
       const exists = file !== null && existsSync(join(ws.configRoot, file));
       if (source === 'local' && !exists) {
         throw preconditionError(`The ticket file ${file} of ${ticket} does not exist (tickets.source local).`, `Check the key with the user, or ask them to add ${file}.`);
       }
       const work = source === 'notes' ? null : existingWork(ws, ticket);
-      emit(ctx, { ticket, source, file, exists, work }, (value) => printTicketContext(ctx, value));
+      emit(ctx, { ticket, source, file, exists, baseUpdate, work }, (value) => printTicketContext(ctx, value));
     },
   },
   {

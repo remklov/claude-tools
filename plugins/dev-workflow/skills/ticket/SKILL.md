@@ -51,7 +51,7 @@ Read a step's file with `cw playbook read` when you enter the step (the Read too
 
 | Step | What | Commands | Details |
 |---|---|---|---|
-| O1 | Intake | `cw doctor --quick`, `cw task list --ticket <KEY>`, `cw task new --rebind <id>` (after the user agreed), `cw ticket context --ticket <KEY>`, one ticket read | `cw playbook read steps/o1-intake.md` |
+| O1 | Intake | `cw doctor --quick`, `cw task list --ticket <KEY>`, `cw task new --rebind <id>` (after the user agreed), `cw ticket context --ticket <KEY>` (updates the base from origin), one ticket read | `cw playbook read steps/o1-intake.md` |
 | O2 | Clarify | AskUserQuestion until requirements and acceptance criteria are testable | `cw playbook read steps/o2-clarify.md` |
 | O3 | Spec | `cw task new --ticket <KEY> --slug <slug> --title "<title>" --type feature`, `cw ticket save --task <id>`, `cw spec save --task <id>`, `cw spec lint --task <id>` | `cw playbook read steps/o3-spec.md` |
 | O4 | Classify | `cw classify --task <id>`, then `cw classify --task <id> --set <c> --why "<one sentence>"` | `cw playbook read steps/o4-classify.md` |

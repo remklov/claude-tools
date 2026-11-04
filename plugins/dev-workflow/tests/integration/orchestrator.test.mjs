@@ -151,7 +151,9 @@ test('ticket context names the source and the ticket or context file of a key, f
   assert.match(contextOf(local, 'APP-123').stdout, /APP-123 · source local: the ticket is docs\/specs\/APP-123\.md \(cw playbook read reference\/local\.md\)/);
   const fx = makeInPlace(t, { config: inPlaceConfig({ tickets: local }) });
   write(fx.root, { 'docs/specs/APP-123.md': '# Search filter\n' });
-  assert.deepEqual(cw(fx.root, ['ticket', 'context', '--ticket', 'APP-123', '--json'], { env: fx.env }).json(), { ticket: 'APP-123', source: 'local', file: 'docs/specs/APP-123.md', exists: true, work: { branches: [], commits: [] } });
+  const { baseUpdate, ...context } = cw(fx.root, ['ticket', 'context', '--ticket', 'APP-123', '--json'], { env: fx.env }).json();
+  assert.equal(baseUpdate.state, 'current');
+  assert.deepEqual(context, { ticket: 'APP-123', source: 'local', file: 'docs/specs/APP-123.md', exists: true, work: { branches: [], commits: [] } });
   // Existing work on the key (ADR 0016): a branch that names it and a commit that names it.
   const git = gitIn(fx.app, fx.env);
   git('branch', 'APP-123/feature/search-filter');

@@ -27,7 +27,7 @@ Run `cw task list` to see every active task. When it notes that this session ran
 
 ## 4. The ticket
 
-Run `cw ticket context --ticket <KEY>`. It names the ticket source (`tickets.source`) and the file of the key, and the existing work on the key: branches whose name holds it and commits whose message names it. Someone may have built it already, and the ticket's status does not tell: ask the user about such work before you plan anew (ADR 0016).
+Run `cw ticket context --ticket <KEY>`. It first brings the base branch up to date with origin, so the ticket and the code you read next are current (ADR 0021). A `Base:` warning means it could not: local commits, local changes in the files the update touches, a checkout elsewhere, or a failed fetch. Then ask the user (AskUserQuestion, naming the warning) whether to go on with the local base or to stop so they can bring it up to date. It then names the ticket source (`tickets.source`) and the file of the key, and the existing work on the key: branches whose name holds it and commits whose message names it. Someone may have built it already, and the ticket's status does not tell: ask the user about such work before you plan anew (ADR 0016).
 
 - **jira** or **linear:** read the issue as `cw playbook read reference/jira.md` (Jira) or `cw playbook read reference/linear.md` (Linear) describes, with its comments and linked issues: scope agreed in a comment belongs to the requirement. No other calls, no writes.
 - **local:** the file it names is the ticket; read it as `cw playbook read reference/local.md` describes. Exit 3 means there is no such file: tell the user and ask for the right key.

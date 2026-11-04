@@ -17,6 +17,7 @@ import { prBodyPath } from '../lib/pr.mjs';
 import { fence } from '../lib/report.mjs';
 import { STEPS_TOTAL, isActive, listTasks, readRoundFile, setResumeBranch, staleAgent, transition, updateTask } from '../lib/task.mjs';
 import { kTokens, measureAgentContext } from '../lib/transcript.mjs';
+import { printBaseUpdate, updateBase } from '../lib/upstream.mjs';
 import { taskPath } from '../lib/workspace.mjs';
 import { mainCheckout } from '../lib/worktree.mjs';
 import { emit, loadTaskContext, requireFlag } from './common.mjs';
@@ -94,6 +95,7 @@ function unrecordedAgent(task, role) {
 
 function printDelegation(ctx, value) {
   const { out } = ctx;
+  if (value.baseUpdate) printBaseUpdate(out, value.baseUpdate, `The task starts from the local ${value.base.branch} at ${short(value.base.commit)}: tell the user in one line.`);
   if (value.report) printReport(out, value.report);
   if (value.foreign && !value.foreign.clean) printForeign(out, value.foreign);
   if (value.freshAgent) out.print(`A fresh ${value.role}: ${value.freshAgent}.`);
@@ -165,7 +167,10 @@ function start(ctx) {
   if (task.resetPending) throw preconditionError(`Task ${task.id} was misclassified and its work is not reset yet.`, `Run cw task reset --task ${task.id} first.`);
   if (ws.mode === 'in-place') requireFreeWorkTree(ws, task);
   requireCleanSpec(ws, task);
-  const base = resolveBase(ws, ctx.flags.base ?? ws.config.git.defaultBase);
+  const baseBranch = ctx.flags.base ?? ws.config.git.defaultBase;
+  // The task branch starts from origin's base wherever a fast-forward gets there (ADR 0021).
+  const baseUpdate = updateBase(ws, baseBranch);
+  const base = resolveBase(ws, baseBranch);
   // A same-named branch that exists now and is not kept for the task is not cw's: reset must not delete it.
   const branchNow = branchExists(ws.mode === 'in-place' ? ws.workRepo : mainCheckout(ws), task.branch);
   const { task: started, brief } = delegateImplementer(ws, task, (current) => {
@@ -191,6 +196,7 @@ function start(ctx) {
     round: started.round,
     complexity: started.complexity,
     base,
+    baseUpdate,
     brief: brief.path,
     rules: brief.rules,
     procedures: brief.procedures,
