@@ -4,9 +4,11 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.9.0 - 2026-11-04
+
 ### Added
 
-- dev-workflow: `cw ticket context` (O1) and `cw task start` fetch `origin` and fast-forward the base branch before the spec reads the code and before the task branch starts from it. The update uses `git merge --ff-only` where the work repo has the branch checked out, and moves the ref where nothing has it checked out. Local commits, a diverged branch, a checkout in another worktree, local changes the update would overwrite and a failed fetch leave the branch as it is. They give a warning: in O1 the orchestrator asks the user whether to go on with the local base, and `cw task start` then starts from it. `git.updateBase: false` turns the update off (ADR 0021).
+- `cw ticket context` (O1) and `cw task start` fetch `origin` and fast-forward the base branch before the spec reads the code and before the task branch starts from it. The update uses `git merge --ff-only` where the work repo has the branch checked out, and moves the ref where nothing has it checked out. Local commits, a diverged branch, a checkout in another worktree, local changes the update would overwrite and a failed fetch leave the branch as it is. They give a warning: in O1 the orchestrator asks the user whether to go on with the local base, and `cw task start` then starts from it. `git.updateBase: false` turns the update off (ADR 0021).
 
 ## dev-workflow 0.8.2 - 2026-11-02
 
