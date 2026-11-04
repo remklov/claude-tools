@@ -4,9 +4,11 @@ All notable changes to the plugins of this marketplace. The format follows [Keep
 
 ## [Unreleased]
 
+## dev-workflow 0.10.0 - 2026-11-04
+
 ### Added
 
-- dev-workflow: `cw task start` compares the task's spec paths with every open task: started active tasks, and tasks ended `done` within 30 days whose branch origin's base lacks. Their spec paths, branch changes and uncommitted files count. A shared file, or a shared area of the new `workflow.exclusivePaths` (such as migrations or lock files), refuses the start until the user accepts with `--accept-overlap "<reason>"`, which the history records. A shared package is only a note (ADR 0022).
+- `cw task start` compares the task's spec paths with every open task: started active tasks, and tasks ended `done` within 30 days whose branch origin's base lacks. Their spec paths, branch changes and uncommitted files count. A shared file, or a shared area of the new `workflow.exclusivePaths` (such as migrations or lock files), refuses the start until the user accepts with `--accept-overlap "<reason>"`, which the history records. A shared package is only a note (ADR 0022).
 
 ## dev-workflow 0.9.0 - 2026-11-04
 
