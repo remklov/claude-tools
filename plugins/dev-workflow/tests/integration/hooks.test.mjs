@@ -144,7 +144,7 @@ test('SubagentStart in worktree mode records an implementer only on a task of it
   const first = specified(fx, { slug: 'first-task', complexity: 's' }).id;
   const second = specified(fx, { slug: 'second-task', complexity: 'm' }).id;
   ok(fx.root, ['task', 'start', '--task', first]);
-  ok(fx.root, ['task', 'start', '--task', second]);
+  ok(fx.root, ['task', 'start', '--task', second, '--accept-overlap', 'both change src/sum.mjs on purpose']);
   // The Agent call of the first task was lost; the session delegates the second one.
   const tree = addAgentWorktree(fx.root, fx.env, 'b0b0');
   const out = hook(fx, 'subagent-start', 'subagent-start', { cwd: tree, agentId: 'agent-b', agentType: 'dev-workflow:implementer-m' }).json().hookSpecificOutput;
@@ -153,7 +153,7 @@ test('SubagentStart in worktree mode records an implementer only on a task of it
 
   // Two tasks of one complexity wait: the hook records nothing and logs why.
   const third = specified(fx, { slug: 'third-task', complexity: 's' }).id;
-  ok(fx.root, ['task', 'start', '--task', third]);
+  ok(fx.root, ['task', 'start', '--task', third, '--accept-overlap', 'all change src/sum.mjs on purpose']);
   silent(hook(fx, 'subagent-start', 'subagent-start', { cwd: tree, agentId: 'agent-x', agentType: IMPLEMENTER }), 'two tasks wait for an implementer-s');
   assert.deepEqual([taskJson(fx, first).agents.implementer, taskJson(fx, third).agents.implementer], [null, null]);
   assert.match(hooksLog(fx), /subagent-start recorded no implementer agent-x \(dev-workflow:implementer-s\): 2 tasks wait for one \(/);

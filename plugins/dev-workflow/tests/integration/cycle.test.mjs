@@ -135,7 +135,7 @@ test('worktree: isolation for the implementer; a new agent takes the branch over
   assert.equal(taskJson(fx, id).resumeBranch, false);
 
   const second = specified(fx, { slug: 'second-task' });
-  ok(fx.root, ['task', 'start', '--task', second.id]);
+  ok(fx.root, ['task', 'start', '--task', second.id, '--accept-overlap', 'both change src/sum.mjs on purpose']);
   const three = addAgentWorktree(fx.root, fx.env, 'three');
   ok(three, ['ws', 'setup', '--task', second.id]);
   ok(three, ['report', 'save', '--task', second.id], JSON.stringify({ status: 'misclassified', acceptanceCriteria: [], misclassified: { reason: 'Bigger.', suggested: 'm' }, handover: NO_HANDOVER }));

@@ -10,6 +10,7 @@ import { agentCall, findingsToFix, returnMessage, reviewerFollowUp, reviewerRech
 import { keepWork, releaseWorktree, renderTaskBrief, resetWork, resolveBase, sameCommit, taskBranchTip, unknownChanges } from '../lib/cycle.mjs';
 import { DECISIONS, askUser, decisionFor, fixDecided, needsUser, recordDecisions, undecided } from '../lib/decisions.mjs';
 import { readJson } from '../lib/fsx.mjs';
+import { findOverlaps, needsDecision, overlapLine } from '../lib/overlap.mjs';
 import { quote } from '../lib/host/index.mjs';
 import { branchExists, currentBranch } from '../lib/git.mjs';
 import { failedError, preconditionError, usageError } from '../lib/out.mjs';
@@ -96,6 +97,7 @@ function unrecordedAgent(task, role) {
 function printDelegation(ctx, value) {
   const { out } = ctx;
   if (value.baseUpdate) printBaseUpdate(out, value.baseUpdate, `The task starts from the local ${value.base.branch} at ${short(value.base.commit)}: tell the user in one line.`);
+  for (const overlap of value.overlaps ?? []) out.print(`${needsDecision(overlap) ? 'Overlap (accepted by the user)' : 'Same package, no file in common'}: ${overlapLine(overlap)}`);
   if (value.report) printReport(out, value.report);
   if (value.foreign && !value.foreign.clean) printForeign(out, value.foreign);
   if (value.freshAgent) out.print(`A fresh ${value.role}: ${value.freshAgent}.`);
@@ -170,11 +172,21 @@ function start(ctx) {
   const baseBranch = ctx.flags.base ?? ws.config.git.defaultBase;
   // The task branch starts from origin's base wherever a fast-forward gets there (ADR 0021).
   const baseUpdate = updateBase(ws, baseBranch);
+  // After the update, so a branch merged into origin's base meanwhile no longer counts (ADR 0022).
+  const overlaps = findOverlaps(ws, task);
+  const accepted = ctx.flags['accept-overlap'];
+  if (overlaps.some(needsDecision) && !accepted) {
+    throw preconditionError(
+      `Task ${task.id} overlaps with open tasks; a second PR on the same files conflicts:\n${overlaps.filter(needsDecision).map((overlap) => `- ${overlapLine(overlap)}`).join('\n')}`,
+      `Ask the user (AskUserQuestion, naming the tasks and files): start anyway, then cw task start --task ${task.id} --accept-overlap "<the user's reason>"; or wait until the other PR is merged, then stop here (the task keeps its phase).`,
+      { overlaps },
+    );
+  }
   const base = resolveBase(ws, baseBranch);
   // A same-named branch that exists now and is not kept for the task is not cw's: reset must not delete it.
   const branchNow = branchExists(ws.mode === 'in-place' ? ws.workRepo : mainCheckout(ws), task.branch);
   const { task: started, brief } = delegateImplementer(ws, task, (current) => {
-    transition(current, 'implement', { note: `round ${current.round + 1}, complexity ${current.complexity}, base ${base.branch}@${base.commit.slice(0, 10)}`, by: 'cw task start' });
+    transition(current, 'implement', { note: `round ${current.round + 1}, complexity ${current.complexity}, base ${base.branch}@${base.commit.slice(0, 10)}${accepted && overlaps.length ? `; overlap with ${overlaps.map((overlap) => overlap.task).join(', ')} accepted: ${accepted}` : ''}`, by: 'cw task start' });
     current.round += 1;
     current.base = base;
     current.steps = freshSteps();
@@ -197,6 +209,7 @@ function start(ctx) {
     complexity: started.complexity,
     base,
     baseUpdate,
+    overlaps,
     brief: brief.path,
     rules: brief.rules,
     procedures: brief.procedures,
@@ -724,9 +737,9 @@ export const commands = [
   {
     path: ['task', 'start'],
     group: 'orchestrator',
-    usage: 'cw task start --task <id> [--base <branch>] | cw task start --task <id> --new-agent',
-    summary: 'Start an implementer round: record the base, write the brief, print the exact Agent call (O6); --new-agent replaces a lost implementer',
-    flags: { task: 'string', base: 'string', 'new-agent': 'boolean' },
+    usage: 'cw task start --task <id> [--base <branch>] [--accept-overlap "<the user\'s reason>"] | cw task start --task <id> --new-agent',
+    summary: 'Start an implementer round: update and record the base, check the overlap with open tasks, write the brief, print the exact Agent call (O6); --new-agent replaces a lost implementer',
+    flags: { task: 'string', base: 'string', 'accept-overlap': 'string', 'new-agent': 'boolean' },
     run: start,
   },
   {
